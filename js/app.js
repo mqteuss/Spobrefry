@@ -1,5 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // Referência para a biblioteca de metadados
     const jsmediatags = window.jsmediatags;
 
     // Elementos do DOM
@@ -18,29 +17,45 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentSongIndex = 0;
     let isPlaying = false;
     const audio = new Audio();
+    audio.preload = 'metadata';
     const defaultCover = 'images/default-cover.jpg';
 
-    // ===== CARREGAMENTO E METADADOS =====
+    // ===== LÓGICA DE CARREGAMENTO E PLAYBACK (CORRIGIDA) =====
 
-    function loadSong(index) {
+    function loadSong(index, shouldPlay = false) {
+        albumCover.style.opacity = '0.5'; // Feedback visual de carregamento
+        currentSongIndex = index;
         const song = songs[index];
         const songPath = `musics/${song.file}`;
         audio.src = songPath;
         
-        // Define informações padrão imediatamente
+        // Limpa a barra de progresso imediatamente
+        progressBar.value = 0;
+        currentTimeEl.textContent = "0:00";
+        durationEl.textContent = "0:00";
+
+        // Define informações padrão enquanto os metadados carregam
         trackTitle.textContent = song.title;
         trackArtist.textContent = song.artist;
         albumCover.src = song.cover ? `images/${song.cover}` : defaultCover;
         updateActivePlaylistItem();
 
-        // Tenta ler os metadados do arquivo de áudio
+        // O evento 'canplay' é a chave. Ele só dispara quando o áudio está PRONTO para tocar.
+        audio.addEventListener('canplay', () => {
+            durationEl.textContent = formatTime(audio.duration);
+            albumCover.style.opacity = '1'; // Restaura a opacidade
+            if (shouldPlay) {
+                playSong();
+            }
+        }, { once: true }); // O listener é executado apenas uma vez por carregamento
+
+        // Tenta ler os metadados em paralelo
         jsmediatags.read(songPath, {
-            onSuccess: function(tag) {
+            onSuccess: (tag) => {
                 const tags = tag.tags;
                 trackTitle.textContent = tags.title || song.title;
                 trackArtist.textContent = tags.artist || song.artist;
 
-                // Converte a imagem de capa dos metadados para um URL
                 if (tags.picture) {
                     const { data, format } = tags.picture;
                     let base64String = "";
@@ -49,30 +64,27 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     albumCover.src = `data:${format};base64,${window.btoa(base64String)}`;
                 }
-                
-                // Atualiza a Media Session API
                 updateMediaSession();
             },
-            onError: function(error) {
+            onError: (error) => {
                 console.log('Erro ao ler metadados:', error.type, error.info);
-                // Se falhar, garante que a media session seja atualizada com os dados do song-list
-                updateMediaSession();
+                updateMediaSession(); // Garante que a media session seja atualizada mesmo em caso de erro
             }
         });
     }
 
-    // ===== CONTROLES DE PLAYBACK =====
-
     function playSong() {
         isPlaying = true;
         playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>';
-        audio.play();
+        audio.play().catch(error => console.error("Erro no Playback:", error));
+        navigator.mediaSession.playbackState = "playing";
     }
 
     function pauseSong() {
         isPlaying = false;
         playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
         audio.pause();
+        navigator.mediaSession.playbackState = "paused";
     }
 
     function togglePlayPause() {
@@ -80,29 +92,37 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function prevSong() {
-        currentSongIndex = (currentSongIndex - 1 + songs.length) % songs.length;
-        loadSong(currentSongIndex);
-        playSong();
+        const newIndex = (currentSongIndex - 1 + songs.length) % songs.length;
+        loadSong(newIndex, true); // Carrega a nova música e instrui para tocar
     }
 
     function nextSong() {
-        currentSongIndex = (currentSongIndex + 1) % songs.length;
-        loadSong(currentSongIndex);
-        playSong();
+        const newIndex = (currentSongIndex + 1) % songs.length;
+        loadSong(newIndex, true); // Carrega a nova música e instrui para tocar
+    }
+    
+    function playFromPlaylist(e) {
+        const targetLi = e.target.closest('li');
+        if (targetLi) {
+            const newIndex = parseInt(targetLi.dataset.index);
+            loadSong(newIndex, true); // Carrega a nova música e instrui para tocar
+        }
     }
 
-    // ===== ATUALIZAÇÃO DA INTERFACE =====
+
+    // ===== FUNÇÕES AUXILIARES (sem grandes alterações) =====
 
     function updateProgress() {
-        const { duration, currentTime } = audio;
-        const progressPercent = (currentTime / duration) * 100;
-        progressBar.value = isNaN(progressPercent) ? 0 : progressPercent;
-        currentTimeEl.textContent = formatTime(currentTime);
-        durationEl.textContent = formatTime(duration);
+        if (audio.duration) {
+            progressBar.value = (audio.currentTime / audio.duration) * 100;
+            currentTimeEl.textContent = formatTime(audio.currentTime);
+        }
     }
 
-    function setProgress() {
-        audio.currentTime = (progressBar.value / 100) * audio.duration;
+    function setProgress(e) {
+        if (audio.duration) {
+            audio.currentTime = (e.target.value / 100) * audio.duration;
+        }
     }
 
     function formatTime(seconds) {
@@ -112,52 +132,41 @@ document.addEventListener('DOMContentLoaded', () => {
         return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
     }
 
-    // ===== PLAYLIST =====
-
     function renderPlaylist() {
         playlistEl.innerHTML = '';
         songs.forEach((song, index) => {
             const li = document.createElement('li');
             li.dataset.index = index;
-            li.innerHTML = `
-                <span class="song-title">${song.title}</span>
-                <span class="song-artist">${song.artist}</span>
-            `;
+            li.innerHTML = `<span class="song-title">${song.title}</span><span class="song-artist">${song.artist}</span>`;
             playlistEl.appendChild(li);
         });
     }
 
     function updateActivePlaylistItem() {
-        const items = document.querySelectorAll('.playlist li');
-        items.forEach((item, index) => {
-            item.classList.toggle('active', index === currentSongIndex);
+        document.querySelectorAll('.playlist li').forEach((item) => {
+            item.classList.toggle('active', parseInt(item.dataset.index) === currentSongIndex);
         });
     }
 
-    function playFromPlaylist(e) {
-        const targetLi = e.target.closest('li');
-        if (targetLi) {
-            currentSongIndex = parseInt(targetLi.dataset.index);
-            loadSong(currentSongIndex);
-            playSong();
+    // ===== MEDIA SESSION API =====
+    
+    function setupMediaSession() {
+        if ('mediaSession' in navigator) {
+            navigator.mediaSession.setActionHandler('play', playSong);
+            navigator.mediaSession.setActionHandler('pause', pauseSong);
+            navigator.mediaSession.setActionHandler('previoustrack', prevSong);
+            navigator.mediaSession.setActionHandler('nexttrack', nextSong);
         }
     }
-    
-    // ===== CONTROLE POR FONES (MEDIA SESSION API) =====
     
     function updateMediaSession() {
         if ('mediaSession' in navigator) {
             navigator.mediaSession.metadata = new MediaMetadata({
                 title: trackTitle.textContent,
                 artist: trackArtist.textContent,
-                album: 'Offline Player',
+                album: 'Music Player',
                 artwork: [{ src: albumCover.src, sizes: '512x512', type: 'image/jpeg' }]
             });
-
-            navigator.mediaSession.setActionHandler('play', playSong);
-            navigator.mediaSession.setActionHandler('pause', pauseSong);
-            navigator.mediaSession.setActionHandler('previoustrack', prevSong);
-            navigator.mediaSession.setActionHandler('nexttrack', nextSong);
         }
     }
 
@@ -173,6 +182,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ===== INICIALIZAÇÃO =====
 
-    renderPlaylist();
-    loadSong(currentSongIndex);
+    function initialize() {
+        renderPlaylist();
+        loadSong(0, false); // Carrega a primeira música sem tocar
+        setupMediaSession();
+    }
+
+    initialize();
 });
