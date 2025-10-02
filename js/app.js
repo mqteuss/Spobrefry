@@ -10,23 +10,29 @@ document.addEventListener('DOMContentLoaded', () => {
     const playPauseBtn = document.getElementById('play-pause-btn');
     const nextBtn = document.getElementById('next-btn');
     const playlistEl = document.getElementById('playlist');
+    const shuffleBtn = document.getElementById('shuffle-btn'); // NOVO: Seleciona o botão shuffle
 
     // Variáveis de estado
     let currentSongIndex = 0;
     let isPlaying = false;
+    let isShuffle = false; // NOVO: Variável para controlar o modo aleatório
     const audio = new Audio();
-    const preloadAudio = new Audio(); // Elemento de áudio para pré-carregamento
+    const preloadAudio = new Audio();
 
-    // --- NOVA FUNÇÃO ---
-    // Função para pré-carregar a próxima música da lista
+    // Função para pré-carregar a próxima música
     function preloadNextSong() {
-        // Calcula o índice da próxima música, voltando ao início se for a última
-        const nextIndex = (currentSongIndex + 1) % songs.length;
-        // Define o 'src' do nosso player de pré-carregamento, o que inicia o download
+        let nextIndex;
+        if (isShuffle) {
+            // Se estiver no modo aleatório, pré-carrega outra música aleatória
+            do {
+                nextIndex = Math.floor(Math.random() * songs.length);
+            } while (nextIndex === currentSongIndex);
+        } else {
+            nextIndex = (currentSongIndex + 1) % songs.length;
+        }
         preloadAudio.src = `musics/${songs[nextIndex].file}`;
     }
 
-    // Função para carregar uma música (visualmente e no player principal)
     function loadSong(index) {
         const song = songs[index];
         trackTitle.textContent = song.title;
@@ -34,6 +40,131 @@ document.addEventListener('DOMContentLoaded', () => {
         albumCover.src = `images/${song.cover}`;
         audio.src = `musics/${song.file}`;
         updateActivePlaylistItem();
+    }
+    
+    function playSong() {
+        isPlaying = true;
+        playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>';
+        audio.play();
+        preloadNextSong();
+    }
+
+    function pauseSong() {
+        isPlaying = false;
+        playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
+        audio.pause();
+    }
+    
+    function togglePlayPause() {
+        if (isPlaying) {
+            pauseSong();
+        } else {
+            playSong();
+        }
+    }
+
+    // ALTERADO: Função de música anterior agora considera o shuffle
+    function prevSong() {
+        if (isShuffle) {
+            playRandomSong();
+        } else {
+            currentSongIndex = (currentSongIndex - 1 + songs.length) % songs.length;
+            loadSong(currentSongIndex);
+            playSong();
+        }
+    }
+
+    // ALTERADO: Função de próxima música agora considera o shuffle
+    function nextSong() {
+        if (isShuffle) {
+            playRandomSong();
+        } else {
+            currentSongIndex = (currentSongIndex + 1) % songs.length;
+            loadSong(currentSongIndex);
+            playSong();
+        }
+    }
+    
+    // NOVO: Função para tocar uma música aleatória (evitando a repetição da atual)
+    function playRandomSong() {
+        let randomIndex;
+        do {
+            randomIndex = Math.floor(Math.random() * songs.length);
+        } while (randomIndex === currentSongIndex); // Garante que não repita a mesma música
+        
+        currentSongIndex = randomIndex;
+        loadSong(currentSongIndex);
+        playSong();
+    }
+
+    // NOVO: Função para ativar/desativar o modo aleatório
+    function toggleShuffle() {
+        isShuffle = !isShuffle; // Inverte o valor (true -> false, false -> true)
+        shuffleBtn.classList.toggle('active', isShuffle); // Adiciona/remove a classe 'active' para mudar a cor
+    }
+    
+    function updateProgress() {
+        const { duration, currentTime } = audio;
+        const progressPercent = (currentTime / duration) * 100;
+        progressBar.value = isNaN(progressPercent) ? 0 : progressPercent;
+        currentTimeEl.textContent = formatTime(currentTime);
+        durationEl.textContent = formatTime(duration);
+    }
+
+    function formatTime(seconds) {
+        if (isNaN(seconds)) return "0:00";
+        const minutes = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
+    }
+
+    function setProgressFromScrub() {
+        audio.currentTime = (progressBar.value / 100) * audio.duration;
+    }
+
+    function renderPlaylist() {
+        playlistEl.innerHTML = '';
+        songs.forEach((song, index) => {
+            const li = document.createElement('li');
+            li.textContent = `${song.title} - ${song.artist}`;
+            li.dataset.index = index;
+            playlistEl.appendChild(li);
+        });
+    }
+    
+    function updateActivePlaylistItem() {
+        const items = document.querySelectorAll('.playlist li');
+        items.forEach((item, index) => {
+            if (index === currentSongIndex) {
+                item.classList.add('active');
+            } else {
+                item.classList.remove('active');
+            }
+        });
+    }
+    
+    function playFromPlaylist(e) {
+        if (e.target.tagName === 'LI') {
+            currentSongIndex = parseInt(e.target.dataset.index);
+            loadSong(currentSongIndex);
+            playSong();
+        }
+    }
+
+    // --- LISTA DE EVENTOS ---
+    playPauseBtn.addEventListener('click', togglePlayPause);
+    prevBtn.addEventListener('click', prevSong);
+    nextBtn.addEventListener('click', nextSong);
+    shuffleBtn.addEventListener('click', toggleShuffle); // NOVO: Evento para o botão shuffle
+    audio.addEventListener('timeupdate', updateProgress);
+    audio.addEventListener('ended', nextSong); // Quando a música acaba, a função nextSong decide se toca a próxima ou uma aleatória
+    progressBar.addEventListener('input', setProgressFromScrub);
+    playlistEl.addEventListener('click', playFromPlaylist);
+
+    // --- INICIALIZAÇÃO ---
+    renderPlaylist();
+    loadSong(currentSongIndex);
+});
     }
     
     // Função para dar Play na música
@@ -278,4 +409,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
     initialize();
 });
+
 
