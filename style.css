@@ -195,3 +195,8 @@ body {
 .playlist li .song-title { font-size: 1em; pointer-events: none; }
 .playlist li .song-artist { font-size: 0.8em; opacity: 0.7; pointer-events: none; }
 .playlist li.active .song-artist { color: var(--dark-color); opacity: 0.9; }
+/* Estilo para quando o botão de shuffle (ou outro) estiver ativo */
+.control-btn.active {
+    color: #19cc95; /* Um verde-água para indicar que está "ligado" */
+}
+
