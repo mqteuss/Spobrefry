@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Music Player</title>
+    <meta name="theme-color" content="#181818"/>
+    <link rel="manifest" href="manifest.json">
+
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
@@ -18,30 +21,44 @@
                 <div class="track-info">
                     <h2 class="track-title" id="track-title">Bem-vindo!</h2>
                     <h3 class="track-artist" id="track-artist">Selecione uma música na playlist</h3>
-                    <h4 class="track-album" id="track-album"></h4>
                 </div>
                 <div class="progress-container">
                     <span id="current-time">0:00</span>
                     <input type="range" class="progress-bar" id="progress-bar" value="0" step="1">
                     <span id="duration">0:00</span>
                 </div>
-                <div class="controls">
-                    <button id="shuffle-btn" class="control-btn">
-                        <i class="fas fa-shuffle"></i>
-                    </button>
-                    <button id="prev-btn" class="control-btn">
-                        <i class="fas fa-backward-step"></i>
-                    </button>
-                    <button id="play-pause-btn" class="control-btn play">
-                        <i class="fas fa-play"></i>
-                    </button>
-                    <button id="next-btn" class="control-btn">
-                        <i class="fas fa-forward-step"></i>
-                    </button>
+                <div class="controls-container">
+                    <div class="main-controls">
+                        <button id="shuffle-btn" class="control-btn" title="Aleatório">
+                            <i class="fas fa-shuffle"></i>
+                        </button>
+                        <button id="prev-btn" class="control-btn" title="Anterior">
+                            <i class="fas fa-backward-step"></i>
+                        </button>
+                        <button id="play-pause-btn" class="control-btn play" title="Play/Pause">
+                            <i class="fas fa-play"></i>
+                        </button>
+                        <button id="next-btn" class="control-btn" title="Próxima">
+                            <i class="fas fa-forward-step"></i>
+                        </button>
+                    </div>
+                    <div class="volume-control">
+                        <button id="volume-btn" class="control-btn" title="Volume">
+                            <i class="fas fa-volume-high"></i>
+                        </button>
+                        <input type="range" id="volume-slider" class="volume-slider" min="0" max="1" step="0.01" value="1">
+                    </div>
                 </div>
 
                 <div class="equalizer-container">
-                    <h4 class="eq-title">Equalizador</h4>
+                    <div class="eq-header">
+                        <h4 class="eq-title">Equalizador</h4>
+                        <div class="eq-presets">
+                            <select id="eq-presets-select"></select>
+                            <input type="text" id="eq-preset-name" placeholder="Nome do Preset">
+                            <button id="save-preset-btn">Salvar</button>
+                        </div>
+                    </div>
                     <div class="eq-band">
                         <label>Graves</label>
                         <input type="range" id="eq-bass" class="eq-slider" min="-15" max="15" value="0" step="1">
@@ -55,13 +72,16 @@
                         <input type="range" id="eq-treble" class="eq-slider" min="-15" max="15" value="0" step="1">
                     </div>
                 </div>
-                </div>
+            </div>
         </div>
 
         <div class="playlist-container">
             <h3>Sua Playlist</h3>
+            <div class="search-container">
+                <input type="text" id="search-input" placeholder="Buscar na playlist...">
+            </div>
             <ul class="playlist" id="playlist">
-                </ul>
+            </ul>
         </div>
     </div>
 
@@ -69,5 +89,14 @@
     <script src="js/song-list.js"></script>
     <script src="js/app.js"></script>
 
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js')
+                    .then(reg => console.log('Service Worker: Registrado'))
+                    .catch(err => console.log(`Service Worker: Erro: ${err}`));
+            });
+        }
+    </script>
 </body>
 </html>
