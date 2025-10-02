@@ -20,50 +20,59 @@ document.addEventListener('DOMContentLoaded', () => {
     const audio = new Audio();
     const preloadAudio = new Audio();
 
-    // --- NOVO: WEB AUDIO API ---
+    // --- WEB AUDIO API ---
     let audioContext;
     let sourceNode;
     let bassFilter, midFilter, trebleFilter;
+    let compressor; // <-- NOVO: Compressor para evitar clipping
     let audioApiInitialized = false;
 
     /**
-     * NOVO: Inicializa a Web Audio API.
-     * Isso só pode acontecer após uma interação do usuário (como o primeiro clique no play).
+     * Inicializa a Web Audio API com um Compressor/Limiter para evitar distorção.
      */
     function setupAudioAPI() {
         if (audioApiInitialized) return;
         
-        // 1. Cria o Contexto de Áudio principal
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
-
-        // 2. Cria a Fonte: conecta nosso elemento <audio> à API
         sourceNode = audioContext.createMediaElementSource(audio);
 
-        // 3. Cria os Filtros do Equalizador
+        // Cria os Filtros do Equalizador
         bassFilter = audioContext.createBiquadFilter();
-        bassFilter.type = 'lowshelf'; // Filtro para frequências baixas (graves)
-        bassFilter.frequency.value = 300; // Afeta frequências abaixo de 300 Hz
+        bassFilter.type = 'lowshelf';
+        bassFilter.frequency.value = 300;
 
         midFilter = audioContext.createBiquadFilter();
-        midFilter.type = 'peaking'; // Filtro para uma faixa de frequências médias
-        midFilter.frequency.value = 1200; // Frequência central em 1200 Hz
-        midFilter.Q.value = 1; // "Largura" do filtro
+        midFilter.type = 'peaking';
+        midFilter.frequency.value = 1200;
+        midFilter.Q.value = 1;
 
         trebleFilter = audioContext.createBiquadFilter();
-        trebleFilter.type = 'highshelf'; // Filtro para frequências altas (agudos)
-        trebleFilter.frequency.value = 4000; // Afeta frequências acima de 4000 Hz
+        trebleFilter.type = 'highshelf';
+        trebleFilter.frequency.value = 4000;
 
-        // 4. Conecta os nós em cadeia: Fonte -> Filtros -> Alto-falantes
+        // --- CORREÇÃO DO XIADO ---
+        // 1. Cria o Compressor
+        compressor = audioContext.createDynamicsCompressor();
+        
+        // 2. Configura o compressor para atuar como um "limiter"
+        compressor.threshold.setValueAtTime(-1, audioContext.currentTime); // Atua em sons muito altos, perto do limite
+        compressor.knee.setValueAtTime(0, audioContext.currentTime);      // Curva "dura", limitando precisamente
+        compressor.ratio.setValueAtTime(20, audioContext.currentTime);    // Ratio máximo para compressão forte
+        compressor.attack.setValueAtTime(0.001, audioContext.currentTime);// Reage quase instantaneamente
+        compressor.release.setValueAtTime(0.1, audioContext.currentTime); // Libera a compressão suavemente
+
+        // 3. Conecta os nós na nova ordem: Fonte -> Filtros -> Compressor -> Alto-falantes
         sourceNode.connect(bassFilter);
         bassFilter.connect(midFilter);
         midFilter.connect(trebleFilter);
-        trebleFilter.connect(audioContext.destination);
+        trebleFilter.connect(compressor); // O último filtro agora se conecta ao compressor
+        compressor.connect(audioContext.destination); // O compressor se conecta à saída de áudio
 
         audioApiInitialized = true;
-        console.log("Web Audio API inicializada.");
+        console.log("Web Audio API inicializada com Limiter.");
     }
 
-    // --- FUNÇÕES DE CONTROLE DE MÚSICA ---
+    // --- FUNÇÕES DE CONTROLE DE MÚSICA (sem alterações daqui para baixo) ---
 
     function loadSong(index) {
         const song = songs[index];
@@ -76,11 +85,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function playSong() {
-        // NOVO: Inicializa a API no primeiro play
         if (!audioApiInitialized) {
             setupAudioAPI();
         }
-        // Garante que o AudioContext seja retomado (necessário em alguns navegadores)
         if (audioContext && audioContext.state === 'suspended') {
             audioContext.resume();
         }
@@ -153,8 +160,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- ATUALIZAÇÕES DE INTERFACE ---
-
     function updateProgress() {
         const { duration, currentTime } = audio;
         const progressPercent = (currentTime / duration) * 100;
@@ -208,8 +213,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- SINCRONIZAÇÃO DE ESTADO E MEDIA SESSION API ---
-
     function syncPlayState() {
         isPlaying = true;
         playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>';
@@ -260,7 +263,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     playlistEl.addEventListener('click', playFromPlaylist);
 
-    // NOVO: Event listeners para os sliders do Equalizador
     document.getElementById('eq-bass').addEventListener('input', (e) => {
         if (bassFilter) bassFilter.gain.value = e.target.value;
     });
