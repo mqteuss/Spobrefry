@@ -2,93 +2,142 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Music Player</title>
-    <meta name="theme-color" content="#181818"/>
-
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Music Player">
-    <link rel="apple-touch-icon" href="icons/icon-192x192.png">
-    
+    <meta name="theme-color" content="#121212"/>
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body>
 
-    <div class="main-container">
-        <div class="player-container">
-            <div class="player-body">
-                <div class="album-art">
-                    <img src="images/default-cover.jpg" alt="Capa do Álbum" id="album-cover">
-                </div>
-                <div class="track-info">
-                    <h2 class="track-title" id="track-title">Bem-vindo!</h2>
-                    <h3 class="track-artist" id="track-artist">Selecione uma música na playlist</h3>
-                </div>
-                <div class="progress-container">
-                    <span id="current-time">0:00</span>
-                    <input type="range" class="progress-bar" id="progress-bar" value="0" step="1">
-                    <span id="duration">0:00</span>
-                </div>
-                <div class="controls-container">
-                    <div class="main-controls">
-                        <button id="shuffle-btn" class="control-btn" title="Aleatório">
-                            <i class="fas fa-shuffle"></i>
-                        </button>
-                        <button id="prev-btn" class="control-btn" title="Anterior">
-                            <i class="fas fa-backward-step"></i>
-                        </button>
-                        <button id="play-pause-btn" class="control-btn play" title="Play/Pause">
-                            <i class="fas fa-play"></i>
-                        </button>
-                        <button id="next-btn" class="control-btn" title="Próxima">
-                            <i class="fas fa-forward-step"></i>
-                        </button>
+    <main id="app-content">
+        <div id="library-view" class="view active">
+            <div class="player-container">
+                <div class="player-body">
+                    <div class="album-art">
+                        <img src="images/default-cover.jpg" alt="Capa do Álbum" id="album-cover">
                     </div>
-                    <div class="volume-control">
-                        <button id="volume-btn" class="control-btn" title="Volume">
-                            <i class="fas fa-volume-high"></i>
-                        </button>
-                        <input type="range" id="volume-slider" class="volume-slider" min="0" max="1" step="0.01" value="1">
+                    <div class="track-info">
+                        <h2 class="track-title" id="track-title">Bem-vindo!</h2>
+                        <h3 class="track-artist" id="track-artist">Selecione uma música</h3>
                     </div>
-                </div>
-
-                <div class="equalizer-container">
-                    <div class="eq-header">
-                        <h4 class="eq-title">Equalizador</h4>
-                        <div class="eq-presets">
-                            <select id="eq-presets-select"></select>
-                            <input type="text" id="eq-preset-name" placeholder="Nome do Preset">
-                            <button id="save-preset-btn">Salvar</button>
+                    <div class="progress-container">
+                        <span id="current-time">0:00</span>
+                        <input type="range" class="progress-bar" id="progress-bar" value="0" step="1">
+                        <span id="duration">0:00</span>
+                    </div>
+                    <div class="controls-container">
+                        <div class="main-controls">
+                            <button id="shuffle-btn" class="control-btn" title="Aleatório"><i class="fas fa-shuffle"></i></button>
+                            <button id="prev-btn" class="control-btn" title="Anterior"><i class="fas fa-backward-step"></i></button>
+                            <button id="play-pause-btn" class="control-btn play" title="Play/Pause"><i class="fas fa-play"></i></button>
+                            <button id="next-btn" class="control-btn" title="Próxima"><i class="fas fa-forward-step"></i></button>
+                        </div>
+                        <div class="volume-control">
+                            <button id="volume-btn" class="control-btn" title="Volume"><i class="fas fa-volume-high"></i></button>
+                            <input type="range" id="volume-slider" class="volume-slider" min="0" max="1" step="0.01" value="1">
                         </div>
                     </div>
-                    <div class="eq-band">
-                        <label>Graves</label>
-                        <input type="range" id="eq-bass" class="eq-slider" min="-15" max="15" value="0" step="1">
-                    </div>
-                    <div class="eq-band">
-                        <label>Médios</label>
-                        <input type="range" id="eq-mids" class="eq-slider" min="-15" max="15" value="0" step="1">
-                    </div>
-                    <div class="eq-band">
-                        <label>Agudos</label>
-                        <input type="range" id="eq-treble" class="eq-slider" min="-15" max="15" value="0" step="1">
+                    <div class="equalizer-container">
+                         <div class="eq-header">
+                            <h4 class="eq-title">Equalizador</h4>
+                            <div class="eq-presets">
+                                <select id="eq-presets-select"></select>
+                                <input type="text" id="eq-preset-name" placeholder="Nome do Preset">
+                                <button id="save-preset-btn">Salvar</button>
+                            </div>
+                        </div>
+                        <div class="eq-band"><label>Graves</label><input type="range" id="eq-bass" class="eq-slider" min="-15" max="15" value="0" step="1"></div>
+                        <div class="eq-band"><label>Médios</label><input type="range" id="eq-mids" class="eq-slider" min="-15" max="15" value="0" step="1"></div>
+                        <div class="eq-band"><label>Agudos</label><input type="range" id="eq-treble" class="eq-slider" min="-15" max="15" value="0" step="1"></div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="playlist-container">
-            <h3>Sua Playlist</h3>
-            <div class="search-container">
-                <input type="text" id="search-input" placeholder="Buscar na playlist...">
+        <div id="playlist-view" class="view">
+             <div class="page-container">
+                <div class="page-header">
+                    <h3>Suas Playlists</h3>
+                </div>
+                <ul class="playlist-list" id="playlists-list-container">
+                    </ul>
             </div>
-            <ul class="playlist" id="playlist">
-            </ul>
+        </div>
+
+        <div id="playlist-detail-view" class="view">
+            <div class="page-container">
+                 <button class="back-btn" data-target="playlist-view"><i class="fas fa-arrow-left"></i> Voltar</button>
+                 <div class="playlist-detail-header">
+                     <div class="playlist-cover-container">
+                        <img src="images/default-cover.jpg" alt="Capa da Playlist" id="playlist-detail-cover">
+                        <button id="change-cover-btn" class="change-cover-btn" title="Alterar capa da playlist"><i class="fas fa-camera"></i></button>
+                        <input type="file" id="cover-file-input" accept="image/*" style="display: none;">
+                     </div>
+                     <div class="playlist-detail-info">
+                         <h2 id="playlist-detail-name">Nome da Playlist</h2>
+                         <div class="playlist-actions">
+                             <button class="action-btn" id="rename-playlist-btn"><i class="fas fa-pen"></i> Renomear</button>
+                             <button class="action-btn danger" id="delete-playlist-btn"><i class="fas fa-trash"></i> Excluir</button>
+                         </div>
+                     </div>
+                 </div>
+                 <ul class="playlist" id="playlist-detail-songs">
+                    </ul>
+                 
+                 <div id="playlist-empty-state" class="empty-state-container">
+                    <h3>Sua playlist está vazia</h3>
+                    <p>Vamos encontrar algumas músicas para adicionar.</p>
+                    <button id="add-songs-from-empty-state-btn" class="btn-primary">
+                        <i class="fas fa-music"></i> Adicionar Músicas
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="search-view" class="view">
+            <div class="page-container">
+                <h2>Buscar</h2>
+                <div class="search-container">
+                    <i class="fas fa-search search-icon"></i>
+                    <input type="text" id="search-input" placeholder="O que você quer ouvir?">
+                </div>
+                <ul class="search-results-list" id="search-results">
+                    </ul>
+            </div>
+        </div>
+    </main>
+
+    <div id="create-playlist-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h4>Criar nova playlist</h4>
+            <input type="text" id="new-playlist-name" placeholder="Dê um nome à sua playlist">
+            <div class="modal-actions">
+                <button class="modal-btn" id="cancel-create-playlist">Cancelar</button>
+                <button class="modal-btn primary" id="confirm-create-playlist">Criar</button>
+            </div>
         </div>
     </div>
+
+    <div id="add-to-playlist-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h4>Adicionar à playlist</h4>
+            <ul id="modal-playlist-list"></ul>
+            <div class="modal-actions">
+                <button class="modal-btn" id="cancel-add-to-playlist">Fechar</button>
+            </div>
+        </div>
+    </div>
+    
+    <nav class="bottom-nav">
+        <button class="nav-btn" data-view="search-view"><i class="fas fa-search"></i><span>Buscar</span></button>
+        <button class="nav-btn active" data-view="library-view"><i class="fas fa-compact-disc"></i><span>Player</span></button>
+        <button class="nav-btn" data-view="playlist-view"><i class="fas fa-list-music"></i><span>Playlists</span></button>
+        <button class="nav-btn" id="create-btn"><i class="fas fa-plus"></i><span>Criar</span></button>
+    </nav>
+    
+    <div id="toast-notification" class="toast"></div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
     <script src="js/song-list.js"></script>
