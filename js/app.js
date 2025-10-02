@@ -59,7 +59,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function saveState() {
-        const stateToSave = { ...state, songList: songList.map(s => s.file) };
+        const stateToSave = {
+            ...state,
+            songList: songList.map(s => s.file)
+        };
         localStorage.setItem('musicPlayerState', JSON.stringify(stateToSave));
     }
 
@@ -73,19 +76,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- FUNÇÃO PARA MANTER O AUDIOCONTEXT ATIVO ---
-    function keepAudioContextAlive() {
-        if (!isAudioContextInitialized) return;
-        const source = audioContext.createBufferSource();
-        source.buffer = audioContext.createBuffer(1, 1, 22050); // Buffer mínimo
-        const gain = audioContext.createGain();
-        gain.gain.value = 0.0; // Totalmente silencioso
-        source.connect(gain);
-        gain.connect(audioContext.destination);
-        source.start(0);
-        console.log("AudioContext Keep-Alive iniciado.");
-    }
-    
     // --- INICIALIZAÇÃO DO CONTEXTO DE ÁUDIO ---
     function initializeAudioContext() {
         if (isAudioContextInitialized) return;
@@ -105,10 +95,9 @@ document.addEventListener('DOMContentLoaded', () => {
         source1.connect(bassFilter).connect(midFilter).connect(trebleFilter).connect(audioContext.destination);
         source2.connect(bassFilter).connect(midFilter).connect(trebleFilter).connect(audioContext.destination);
         isAudioContextInitialized = true;
-        keepAudioContextAlive(); // Inicia o "keep-alive"
     }
 
-    // --- LÓGICA DE WAKE LOCK ---
+    // --- LÓGICA DE WAKE LOCK (MAIS ROBUSTA) ---
     const requestWakeLock = async () => {
         if ('wakeLock' in navigator && !wakeLock) {
             try {
@@ -136,7 +125,11 @@ document.addEventListener('DOMContentLoaded', () => {
         trackArtist.textContent = song.artist || "Artista Desconhecido";
         albumCover.src = song.cover ? `images/${song.cover}` : 'images/default-cover.jpg';
         activeAudio.src = `musics/${song.file}`;
-        activeAudio.currentTime = shouldPlay ? 0 : state.currentTime;
+        if (shouldPlay) {
+            activeAudio.currentTime = 0;
+        } else {
+            activeAudio.currentTime = state.currentTime;
+        }
         updateActivePlaylistItem();
         updateMediaSessionMetadata();
         if (shouldPlay) play();
@@ -150,6 +143,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (audioContext.state === 'suspended') {
             audioContext.resume();
         }
+        
         const playPromise = activeAudio.play();
         if (playPromise !== undefined) {
             playPromise.then(() => {
@@ -176,18 +170,55 @@ document.addEventListener('DOMContentLoaded', () => {
         saveState();
     }
 
+    function getNextSongIndex() {
+        if (state.isShuffle) {
+            let randomIndex;
+            if (songList.length <= 1) return 0;
+            do {
+                randomIndex = Math.floor(Math.random() * songList.length);
+            } while (randomIndex === state.currentSongIndex);
+            return randomIndex;
+        } else {
+            return (state.currentSongIndex + 1) % songList.length;
+        }
+    }
+    
+    function getPrevSongIndex() {
+        if (state.isShuffle) return getNextSongIndex();
+        return (state.currentSongIndex - 1 + songList.length) % songList.length;
+    }
+
     function changeTrack(direction) {
-        const nextIndex = direction === 'next' 
-            ? (state.isShuffle ? Math.floor(Math.random() * songList.length) : (state.currentSongIndex + 1) % songList.length)
-            : (state.isShuffle ? Math.floor(Math.random() * songList.length) : (state.currentSongIndex - 1 + songList.length) % songList.length);
-        loadSong(nextIndex, true);
+        const newIndex = direction === 'next' ? getNextSongIndex() : getPrevSongIndex();
+        inactiveAudio.src = `musics/${songList[newIndex].file}`;
+        inactiveAudio.volume = 0;
+        
+        const playPromise = inactiveAudio.play();
+        if (playPromise !== undefined) {
+            playPromise.catch(e => console.error("Erro no áudio inativo:", e));
+        }
+
+        let fadeInterval = setInterval(() => {
+            let newActiveVolume = Math.max(0, activeAudio.volume - (1 / (CROSSFADE_TIME * 10)));
+            let newInactiveVolume = Math.min(state.volume, inactiveAudio.volume + (1 / (CROSSFADE_TIME * 10)));
+            activeAudio.volume = newActiveVolume;
+            inactiveAudio.volume = newInactiveVolume;
+            if (newActiveVolume <= 0) {
+                clearInterval(fadeInterval);
+                activeAudio.pause();
+                [activeAudio, inactiveAudio] = [inactiveAudio, activeAudio];
+                loadSong(newIndex, true);
+                activeAudio.volume = state.volume;
+            }
+        }, 100);
     }
 
     // --- ATUALIZAÇÕES DE UI ---
     function updateProgress() {
         const { duration, currentTime } = activeAudio;
         if (duration) {
-            progressBar.value = (currentTime / duration) * 100;
+            const progressPercent = (currentTime / duration) * 100;
+            progressBar.value = progressPercent;
             durationEl.textContent = formatTime(duration);
         }
         currentTimeEl.textContent = formatTime(currentTime);
@@ -202,12 +233,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateVolumeUI() {
-        const currentVolume = state.isMuted ? 0 : state.volume;
-        [audio1, audio2].forEach(a => a.volume = currentVolume);
         volumeSlider.value = state.volume;
-        if (state.isMuted || state.volume === 0) volumeBtn.innerHTML = '<i class="fas fa-volume-xmark"></i>';
-        else if (state.volume < 0.5) volumeBtn.innerHTML = '<i class="fas fa-volume-low"></i>';
-        else volumeBtn.innerHTML = '<i class="fas fa-volume-high"></i>';
+        const currentVolume = state.isMuted ? 0 : state.volume;
+        audio1.volume = currentVolume;
+        audio2.volume = currentVolume;
+        if (state.isMuted || state.volume === 0) {
+            volumeBtn.innerHTML = '<i class="fas fa-volume-xmark"></i>';
+        } else if (state.volume < 0.5) {
+            volumeBtn.innerHTML = '<i class="fas fa-volume-low"></i>';
+        } else {
+            volumeBtn.innerHTML = '<i class="fas fa-volume-high"></i>';
+        }
     }
 
     function renderPlaylist() {
@@ -216,7 +252,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const li = document.createElement('li');
             li.dataset.index = index;
             li.draggable = true;
-            li.innerHTML = `<span class="song-title">${song.title}</span><span class="song-artist">${song.artist}</span>`;
+            li.innerHTML = `
+                <span class="song-title">${song.title}</span>
+                <span class="song-artist">${song.artist}</span>
+            `;
             playlistEl.appendChild(li);
         });
         updateActivePlaylistItem();
@@ -224,15 +263,38 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateActivePlaylistItem() {
-        document.querySelectorAll('.playlist li').forEach((item) => {
-            item.classList.toggle('active', parseInt(item.dataset.index) === state.currentSongIndex);
+        document.querySelectorAll('.playlist li').forEach((item, index) => {
+            item.classList.toggle('active', index === state.currentSongIndex);
         });
     }
 
     // --- LÓGICA DO EQUALIZADOR ---
     function setupEqualizer() {
-        const presets = { 'Flat': [0,0,0], 'Rock': [5,-3,4], 'Pop': [2,4,2], 'Jazz': [3,2,5], 'Clássico': [-2,3,4] };
-        // Lógica simplificada para manter o foco no problema principal
+        const defaultPresets = { 'Flat': { bass: 0, mids: 0, treble: 0 }, 'Rock': { bass: 5, mids: -3, treble: 4 }, 'Pop': { bass: 2, mids: 4, treble: 2 }, 'Jazz': { bass: 3, mids: 2, treble: 5 }, 'Clássico': { bass: -2, mids: 3, treble: 4 } };
+        function getSavedPresets() { return JSON.parse(localStorage.getItem('eqPresets')) || {}; }
+        function loadPresets() {
+            const allPresets = { ...defaultPresets, ...getSavedPresets() };
+            eqPresetsSelect.innerHTML = '';
+            for (const name in allPresets) { const option = document.createElement('option'); option.value = name; option.textContent = name; eqPresetsSelect.appendChild(option); }
+        }
+        function applyPreset(name) {
+            const allPresets = { ...defaultPresets, ...getSavedPresets() }; const preset = allPresets[name];
+            if (preset) { eqBass.value = preset.bass; eqMids.value = preset.mids; eqTreble.value = preset.treble; updateFilters(); }
+        }
+        function updateFilters() {
+            if (!isAudioContextInitialized) return;
+            bassFilter.gain.value = parseFloat(eqBass.value); midFilter.gain.value = parseFloat(eqMids.value); trebleFilter.gain.value = parseFloat(eqTreble.value);
+        }
+        eqBass.addEventListener('input', updateFilters);
+        eqMids.addEventListener('input', updateFilters);
+        eqTreble.addEventListener('input', updateFilters);
+        eqPresetsSelect.addEventListener('change', (e) => applyPreset(e.target.value));
+        savePresetBtn.addEventListener('click', () => {
+            const name = eqPresetName.value.trim(); if (!name) { alert('Por favor, digite um nome para o preset.'); return; }
+            const savedPresets = getSavedPresets(); savedPresets[name] = { bass: parseFloat(eqBass.value), mids: parseFloat(eqMids.value), treble: parseFloat(eqTreble.value) };
+            localStorage.setItem('eqPresets', JSON.stringify(savedPresets)); eqPresetName.value = ''; loadPresets(); eqPresetsSelect.value = name;
+        });
+        loadPresets(); applyPreset('Flat');
     }
 
     // --- EVENT LISTENERS ---
@@ -240,30 +302,60 @@ document.addEventListener('DOMContentLoaded', () => {
         playPauseBtn.addEventListener('click', togglePlayPause);
         nextBtn.addEventListener('click', () => changeTrack('next'));
         prevBtn.addEventListener('click', () => changeTrack('prev'));
-        shuffleBtn.addEventListener('click', () => {
-            state.isShuffle = !state.isShuffle;
-            shuffleBtn.classList.toggle('active', state.isShuffle);
-            saveState();
+        shuffleBtn.addEventListener('click', () => { state.isShuffle = !state.isShuffle; shuffleBtn.classList.toggle('active', state.isShuffle); saveState(); });
+        [audio1, audio2].forEach(audio => {
+            audio.addEventListener('timeupdate', () => { if (audio === activeAudio) updateProgress(); });
+            audio.addEventListener('ended', () => { if (audio === activeAudio) { releaseWakeLock(); changeTrack('next'); } });
+            audio.addEventListener('loadedmetadata', () => { if (audio === activeAudio) updateProgress(); });
         });
-        activeAudio.addEventListener('timeupdate', updateProgress);
-        activeAudio.addEventListener('ended', () => { releaseWakeLock(); changeTrack('next'); });
-        activeAudio.addEventListener('loadedmetadata', updateProgress);
-        progressBar.addEventListener('input', (e) => { if (activeAudio.duration) activeAudio.currentTime = (e.target.value / 100) * activeAudio.duration; });
+        progressBar.addEventListener('input', (e) => { const { duration } = activeAudio; if (duration) activeAudio.currentTime = (e.target.value / 100) * duration; });
         volumeSlider.addEventListener('input', e => { state.volume = parseFloat(e.target.value); state.isMuted = state.volume === 0; updateVolumeUI(); saveState(); });
         volumeBtn.addEventListener('click', () => { state.isMuted = !state.isMuted; updateVolumeUI(); saveState(); });
+        searchInput.addEventListener('input', e => {
+            const searchTerm = e.target.value.toLowerCase();
+            document.querySelectorAll('.playlist li').forEach(li => {
+                const title = li.querySelector('.song-title').textContent.toLowerCase(); const artist = li.querySelector('.song-artist').textContent.toLowerCase();
+                li.style.display = (title.includes(searchTerm) || artist.includes(searchTerm)) ? '' : 'none';
+            });
+        });
         
+        // --- NOVO: Listener para reativar o app ---
         document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible' && state.isPlaying && activeAudio.paused) {
-                play();
+            if (document.visibilityState === 'visible' && state.isPlaying) {
+                // Se o app volta a ser visível e deveria estar tocando,
+                // re-solicita o wake lock e garante que o áudio toque.
                 requestWakeLock();
+                if(activeAudio.paused) {
+                    play();
+                }
             }
         });
+        
         setInterval(saveState, 5000);
     }
 
     // --- DRAG AND DROP ---
     function setupDragAndDrop() {
-        // Lógica de Drag and Drop...
+        let draggedIndex = null;
+        playlistEl.querySelectorAll('li').forEach(item => {
+            item.addEventListener('dragstart', e => { draggedIndex = parseInt(e.currentTarget.dataset.index); e.currentTarget.classList.add('dragging'); });
+            item.addEventListener('dragend', e => e.currentTarget.classList.remove('dragging'));
+            item.addEventListener('dragover', e => { e.preventDefault(); e.currentTarget.classList.add('drag-over'); });
+            item.addEventListener('dragleave', e => e.currentTarget.classList.remove('drag-over'));
+            item.addEventListener('drop', e => {
+                e.preventDefault(); e.currentTarget.classList.remove('drag-over');
+                const droppedIndex = parseInt(e.currentTarget.dataset.index); if (draggedIndex === droppedIndex) return;
+                const [draggedItem] = songList.splice(draggedIndex, 1); songList.splice(droppedIndex, 0, draggedItem);
+                if (state.currentSongIndex === draggedIndex) { state.currentSongIndex = droppedIndex; }
+                else if (draggedIndex < state.currentSongIndex && droppedIndex >= state.currentSongIndex) { state.currentSongIndex--; }
+                else if (draggedIndex > state.currentSongIndex && droppedIndex <= state.currentSongIndex) { state.currentSongIndex++; }
+                renderPlaylist(); saveState();
+            });
+            item.addEventListener('click', e => {
+                const index = parseInt(e.currentTarget.dataset.index);
+                if (index === state.currentSongIndex) { togglePlayPause(); } else { loadSong(index, true); }
+            });
+        });
     }
 
     // --- MEDIA SESSION API ---
@@ -279,7 +371,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if ('mediaSession' in navigator) {
             const song = songList[state.currentSongIndex]; if (!song) return;
             navigator.mediaSession.metadata = new MediaMetadata({
-                title: song.title, artist: song.artist,
+                title: song.title,
+                artist: song.artist,
                 artwork: [{ src: albumCover.src, sizes: '512x512', type: 'image/jpeg' }]
             });
         }
