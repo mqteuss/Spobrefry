@@ -1,4 +1,4 @@
-const CACHE_NAME = 'music-player-v2'; // Incremente a versão ao mudar os assets
+const CACHE_NAME = 'spobrefy-cache-v1'; // Nome do cache atualizado
 const ASSETS_TO_CACHE = [
     '/',
     '/index.html',
