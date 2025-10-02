@@ -3,7 +3,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const albumCover = document.getElementById('album-cover');
     const trackTitle = document.getElementById('track-title');
     const trackArtist = document.getElementById('track-artist');
-    const trackAlbum = document.getElementById('track-album'); // Adicionado para metadados
+    const trackAlbum = document.getElementById('track-album');
     const progressBar = document.getElementById('progress-bar');
     const currentTimeEl = document.getElementById('current-time');
     const durationEl = document.getElementById('duration');
@@ -17,32 +17,65 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentSongIndex = 0;
     let isPlaying = false;
     let isShuffle = false;
+    let currentCoverUrl = null; // NOVO: Para gerenciar a URL da capa e evitar memory leaks
     const audio = new Audio();
-    const preloadAudio = new Audio(); // Para pré-carregamento
+    const preloadAudio = new Audio();
 
-    // --- FUNÇÕES PRINCIPAIS ---
+    // --- FUNÇÕES DE CONTROLE DE MÚSICA ---
 
     /**
-     * Carrega uma música específica pelo seu índice na playlist.
-     * Atualiza a interface e os metadados da Media Session.
-     * @param {number} index - O índice da música a ser carregada.
+     * Carrega uma música, tentando ler seus metadados (capa, álbum) primeiro.
+     * @param {number} index - O índice da música na playlist.
      */
     function loadSong(index) {
+        // NOVO: Limpa a URL do objeto da capa anterior para liberar memória
+        if (currentCoverUrl) {
+            URL.revokeObjectURL(currentCoverUrl);
+            currentCoverUrl = null;
+        }
+
         const song = songs[index];
         trackTitle.textContent = song.title || "Título Desconhecido";
         trackArtist.textContent = song.artist || "Artista Desconhecido";
-        
-        // Usa uma imagem padrão caso a música não tenha uma capa definida
-        albumCover.src = song.cover ? `images/${song.cover}` : 'images/default-cover.jpg';
+        trackAlbum.textContent = ''; // Limpa o álbum antes de tentar carregar
+        albumCover.src = 'images/default-cover.jpg'; // Reseta para a padrão
         
         audio.src = `musics/${song.file}`;
         
+        // NOVO: Usa jsmediatags para ler metadados do arquivo MP3
+        const jsmediatags = window.jsmediatags;
+        jsmediatags.read(audio.src, {
+            onSuccess: function(tag) {
+                console.log("Metadados lidos:", tag);
+                const tags = tag.tags;
+
+                // Define o título do álbum se existir
+                if (tags.album) {
+                    trackAlbum.textContent = tags.album;
+                }
+                
+                // Define a capa do álbum se existir
+                if (tags.picture) {
+                    const { data, format } = tags.picture;
+                    const base64String = data.reduce((acc, byte) => acc + String.fromCharCode(byte), '');
+                    const imageUrl = `data:${format};base64,${window.btoa(base64String)}`;
+                    albumCover.src = imageUrl;
+                }
+                updateMediaSessionMetadata(); // Atualiza metadados com as novas infos
+            },
+            onError: function(error) {
+                console.log('Erro ao ler metadados:', error.type, error.info);
+                // Se falhar, usa a capa definida no song-list.js ou a padrão
+                albumCover.src = song.cover ? `images/${song.cover}` : 'images/default-cover.jpg';
+                updateMediaSessionMetadata();
+            }
+        });
+        
         updateActivePlaylistItem();
-        updateMediaSessionMetadata(); // <-- NOVO: Atualiza a notificação do sistema
     }
 
     /**
-     * Toca a música atual.
+     * Toca a música atual e pré-carrega a próxima.
      */
     function playSong() {
         audio.play().catch(error => console.error("Erro ao tocar a música:", error));
@@ -55,107 +88,100 @@ document.addEventListener('DOMContentLoaded', () => {
     function pauseSong() {
         audio.pause();
     }
-
+    
     /**
-     * Alterna entre tocar e pausar a música.
-     * Esta função é chamada pelo botão principal da interface.
+     * NOVO: Função central para trocar de faixa com efeito de fade.
+     * @param {number} newIndex - O índice da nova música a ser tocada.
      */
-    function togglePlayPause() {
+    function fadeAndChangeTrack(newIndex) {
+        if (audio.duration && isPlaying) {
+            let currentVolume = audio.volume;
+            const fadeOutInterval = setInterval(() => {
+                currentVolume = Math.max(0, currentVolume - 0.1);
+                audio.volume = currentVolume;
+                if (currentVolume <= 0) {
+                    clearInterval(fadeOutInterval);
+                    currentSongIndex = newIndex;
+                    loadSong(currentSongIndex);
+                    // O 'playSong' será chamado pelo evento 'loadeddata' para garantir que a música esteja pronta
+                }
+            }, 40); // Diminui o volume a cada 40ms
+        } else {
+            // Se não estiver tocando, troca a música instantaneamente
+            currentSongIndex = newIndex;
+            loadSong(currentSongIndex);
+            playSong();
+        }
+    }
+    
+    // NOVO: Listener para o evento 'loadeddata', que dispara quando a música está pronta para tocar
+    audio.addEventListener('loadeddata', () => {
+        // Garante que o fade-in só aconteça se a música foi iniciada
         if (isPlaying) {
-            pauseSong();
-        } else {
-            playSong();
+            fadeInAudio();
         }
-    }
+    });
 
     /**
-     * Pula para a música anterior.
+     * NOVO: Aumenta gradualmente o volume da música (fade-in).
      */
-    function prevSong() {
-        if (isShuffle) {
-            playRandomSong();
-        } else {
-            currentSongIndex = (currentSongIndex - 1 + songs.length) % songs.length;
-            loadSong(currentSongIndex);
-            playSong();
-        }
-    }
-
-    /**
-     * Pula para a próxima música.
-     */
-    function nextSong() {
-        if (isShuffle) {
-            playRandomSong();
-        } else {
-            currentSongIndex = (currentSongIndex + 1) % songs.length;
-            loadSong(currentSongIndex);
-            playSong();
-        }
-    }
-    
-    /**
-     * Toca uma música aleatória, garantindo que não seja a mesma que está tocando.
-     */
-    function playRandomSong() {
-        let randomIndex;
-        if (songs.length > 1) {
-            do {
-                randomIndex = Math.floor(Math.random() * songs.length);
-            } while (randomIndex === currentSongIndex);
-        } else {
-            randomIndex = 0;
-        }
-        currentSongIndex = randomIndex;
-        loadSong(currentSongIndex);
+    function fadeInAudio() {
+        audio.volume = 0; // Começa com volume 0
         playSong();
+        let currentVolume = 0;
+        const fadeInInterval = setInterval(() => {
+            currentVolume = Math.min(1, currentVolume + 0.1);
+            audio.volume = currentVolume;
+            if (currentVolume >= 1) {
+                clearInterval(fadeInInterval);
+            }
+        }, 40);
     }
     
-    /**
-     * Ativa ou desativa o modo de reprodução aleatória.
-     */
+    function togglePlayPause() {
+        isPlaying ? pauseSong() : playSong();
+    }
+    
+    function prevSong() {
+        const newIndex = isShuffle ? getRandomIndex() : (currentSongIndex - 1 + songs.length) % songs.length;
+        fadeAndChangeTrack(newIndex);
+    }
+
+    function nextSong() {
+        const newIndex = isShuffle ? getRandomIndex() : (currentSongIndex + 1) % songs.length;
+        fadeAndChangeTrack(newIndex);
+    }
+
+    function getRandomIndex() {
+        let randomIndex;
+        if (songs.length <= 1) return 0;
+        do {
+            randomIndex = Math.floor(Math.random() * songs.length);
+        } while (randomIndex === currentSongIndex);
+        return randomIndex;
+    }
+    
     function toggleShuffle() {
         isShuffle = !isShuffle;
         shuffleBtn.classList.toggle('active', isShuffle);
     }
-    
-    /**
-     * Pré-carrega a próxima faixa para uma transição mais suave.
-     */
+
     function preloadNextSong() {
         if (songs.length > 1) {
-            let nextIndex;
-            if (isShuffle) {
-                do {
-                    nextIndex = Math.floor(Math.random() * songs.length);
-                } while (nextIndex === currentSongIndex);
-            } else {
-                nextIndex = (currentSongIndex + 1) % songs.length;
-            }
+            const nextIndex = isShuffle ? getRandomIndex() : (currentSongIndex + 1) % songs.length;
             preloadAudio.src = `musics/${songs[nextIndex].file}`;
         }
     }
 
     // --- ATUALIZAÇÕES DE INTERFACE ---
-
-    /**
-     * Atualiza a barra de progresso e os contadores de tempo.
-     */
     function updateProgress() {
         const { duration, currentTime } = audio;
         const progressPercent = (currentTime / duration) * 100;
         progressBar.value = isNaN(progressPercent) ? 0 : progressPercent;
         currentTimeEl.textContent = formatTime(currentTime);
-        if(duration) {
-            durationEl.textContent = formatTime(duration);
-        }
+        if (duration) durationEl.textContent = formatTime(duration);
     }
 
-    /**
-     * Formata segundos para o formato M:SS.
-     * @param {number} seconds - O tempo em segundos.
-     * @returns {string} O tempo formatado.
-     */
     function formatTime(seconds) {
         if (isNaN(seconds)) return "0:00";
         const minutes = Math.floor(seconds / 60);
@@ -163,63 +189,38 @@ document.addEventListener('DOMContentLoaded', () => {
         return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
     }
 
-    /**
-     * Define a posição da música com base na interação com a barra de progresso.
-     */
     function setProgressFromScrub(e) {
-        // Usa e.target.value que é o valor atual do range input
         const newTime = (e.target.value / 100) * audio.duration;
-        if (!isNaN(newTime)) {
-            audio.currentTime = newTime;
-        }
+        if (!isNaN(newTime)) audio.currentTime = newTime;
     }
 
-    /**
-     * Renderiza a lista de músicas na interface.
-     */
     function renderPlaylist() {
         playlistEl.innerHTML = '';
         songs.forEach((song, index) => {
             const li = document.createElement('li');
             li.dataset.index = index;
-            // Estrutura para título e artista separados
-            li.innerHTML = `
-                <span class="song-title">${song.title}</span>
-                <span class="song-artist">${song.artist}</span>
-            `;
+            li.innerHTML = `<span class="song-title">${song.title}</span><span class="song-artist">${song.artist}</span>`;
             playlistEl.appendChild(li);
         });
     }
-    
-    /**
-     * Destaca a música que está tocando na playlist.
-     */
+
     function updateActivePlaylistItem() {
-        const items = document.querySelectorAll('.playlist li');
-        items.forEach((item, index) => {
+        document.querySelectorAll('.playlist li').forEach((item, index) => {
             item.classList.toggle('active', index === currentSongIndex);
         });
     }
-    
-    /**
-     * Inicia a reprodução de uma música clicada na playlist.
-     */
+
     function playFromPlaylist(e) {
         const targetLi = e.target.closest('li');
         if (targetLi) {
-            currentSongIndex = parseInt(targetLi.dataset.index);
-            loadSong(currentSongIndex);
-            playSong();
+            const newIndex = parseInt(targetLi.dataset.index);
+            if (newIndex !== currentSongIndex) {
+                 fadeAndChangeTrack(newIndex);
+            }
         }
     }
 
     // --- SINCRONIZAÇÃO DE ESTADO E MEDIA SESSION API ---
-
-    /**
-     * CORREÇÃO #1: Sincroniza o estado da nossa variável `isPlaying` e da UI
-     * com o estado real do elemento <audio>. Isso garante que, se o navegador
-     * pausar a música (ex: pela notificação), nossa interface reflita essa mudança.
-     */
     function syncPlayState() {
         isPlaying = true;
         playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>';
@@ -230,12 +231,6 @@ document.addEventListener('DOMContentLoaded', () => {
         playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
     }
 
-    /**
-     * CORREÇÃO #2: Configura a Media Session API.
-     * Isso integra o player com a interface do sistema operacional (notificações,
-     * controles de mídia, etc.), resolvendo todos os bugs reportados e
-     * ajudando a manter a música tocando em segundo plano.
-     */
     function setupMediaSession() {
         if ('mediaSession' in navigator) {
             navigator.mediaSession.setActionHandler('play', playSong);
@@ -245,19 +240,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    /**
-     * Atualiza as informações da música na notificação do sistema.
-     */
     function updateMediaSessionMetadata() {
         if ('mediaSession' in navigator) {
             const song = songs[currentSongIndex];
             navigator.mediaSession.metadata = new MediaMetadata({
-                title: song.title,
-                artist: song.artist,
-                album: song.album || '', // Adicione 'album' ao seu song-list.js se quiser
-                artwork: [
-                    { src: albumCover.src, sizes: '512x512', type: 'image/jpeg' }
-                ]
+                title: trackTitle.textContent,
+                artist: trackArtist.textContent,
+                album: trackAlbum.textContent,
+                artwork: [{ src: albumCover.src, sizes: '512x512', type: 'image/jpeg' }]
             });
         }
     }
@@ -267,18 +257,12 @@ document.addEventListener('DOMContentLoaded', () => {
     prevBtn.addEventListener('click', prevSong);
     nextBtn.addEventListener('click', nextSong);
     shuffleBtn.addEventListener('click', toggleShuffle);
-    
-    // Sincroniza a UI com o estado real do áudio
     audio.addEventListener('play', syncPlayState);
     audio.addEventListener('pause', syncPauseState);
-    
     audio.addEventListener('timeupdate', updateProgress);
     audio.addEventListener('ended', nextSong);
-    audio.addEventListener('loadedmetadata', updateProgress); // Atualiza duração assim que carregar
-
-    // 'input' é melhor que 'change' para uma resposta em tempo real
+    audio.addEventListener('loadedmetadata', updateProgress);
     progressBar.addEventListener('input', setProgressFromScrub);
-    
     playlistEl.addEventListener('click', playFromPlaylist);
 
     // --- INICIALIZAÇÃO ---
