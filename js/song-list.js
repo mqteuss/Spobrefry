@@ -38,4 +38,9 @@ const songs = [
         artist: "Zayn",
         file: "Zayn - Lied To.mp3" // Sem 'cover', usará a capa padrão
     },
+{
+        title: "505",
+        artist: "Artic Monkeys",
+        file: "505-ArticMonkeys.mp3" // Sem 'cover', usará a capa padrão
+    },
 ];
