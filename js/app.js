@@ -60,11 +60,11 @@ document.addEventListener('DOMContentLoaded', () => {
             ...state,
             songList: songList.map(s => s.file)
         };
-        localStorage.setItem('musicPlayerState', JSON.stringify(stateToSave));
+        localStorage.setItem('spobrefyState', JSON.stringify(stateToSave));
     }
 
     function loadState() {
-        const savedState = JSON.parse(localStorage.getItem('musicPlayerState'));
+        const savedState = JSON.parse(localStorage.getItem('spobrefyState'));
         if (savedState) {
             state = { ...state, ...savedState, isPlaying: false, currentTime: savedState.currentTime || 0 };
             if (savedState.songList) {
