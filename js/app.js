@@ -1,6 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const jsmediatags = window.jsmediatags;
-
     // Elementos do DOM
     const albumCover = document.getElementById('album-cover');
     const trackTitle = document.getElementById('track-title');
@@ -17,48 +15,138 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentSongIndex = 0;
     let isPlaying = false;
     const audio = new Audio();
-    audio.preload = 'metadata';
-    const defaultCover = 'images/default-cover.jpg';
+    const preloadAudio = new Audio(); // Elemento de áudio para pré-carregamento
 
-    // ===== LÓGICA DE CARREGAMENTO E PLAYBACK (CORRIGIDA) =====
+    // --- NOVA FUNÇÃO ---
+    // Função para pré-carregar a próxima música da lista
+    function preloadNextSong() {
+        // Calcula o índice da próxima música, voltando ao início se for a última
+        const nextIndex = (currentSongIndex + 1) % songs.length;
+        // Define o 'src' do nosso player de pré-carregamento, o que inicia o download
+        preloadAudio.src = `musics/${songs[nextIndex].file}`;
+    }
 
-    function loadSong(index, shouldPlay = false) {
-        albumCover.style.opacity = '0.5'; // Feedback visual de carregamento
-        currentSongIndex = index;
+    // Função para carregar uma música (visualmente e no player principal)
+    function loadSong(index) {
         const song = songs[index];
-        const songPath = `musics/${song.file}`;
-        audio.src = songPath;
-        
-        // Limpa a barra de progresso imediatamente
-        progressBar.value = 0;
-        currentTimeEl.textContent = "0:00";
-        durationEl.textContent = "0:00";
-
-        // Define informações padrão enquanto os metadados carregam
         trackTitle.textContent = song.title;
         trackArtist.textContent = song.artist;
-        albumCover.src = song.cover ? `images/${song.cover}` : defaultCover;
+        albumCover.src = `images/${song.cover}`;
+        audio.src = `musics/${song.file}`;
         updateActivePlaylistItem();
+    }
+    
+    // Função para dar Play na música
+    function playSong() {
+        isPlaying = true;
+        playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>';
+        audio.play();
+        // --- ALTERAÇÃO AQUI ---
+        // Assim que uma música começa, já pré-carregamos a seguinte
+        preloadNextSong(); 
+    }
 
-        // O evento 'canplay' é a chave. Ele só dispara quando o áudio está PRONTO para tocar.
-        audio.addEventListener('canplay', () => {
-            durationEl.textContent = formatTime(audio.duration);
-            albumCover.style.opacity = '1'; // Restaura a opacidade
-            if (shouldPlay) {
-                playSong();
+    // Função para Pausar a música
+    function pauseSong() {
+        isPlaying = false;
+        playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
+        audio.pause();
+    }
+    
+    // Alternar entre Play e Pause
+    function togglePlayPause() {
+        if (isPlaying) {
+            pauseSong();
+        } else {
+            playSong();
+        }
+    }
+
+    // Ir para a música anterior
+    function prevSong() {
+        currentSongIndex = (currentSongIndex - 1 + songs.length) % songs.length;
+        loadSong(currentSongIndex);
+        playSong();
+    }
+
+    // Ir para a próxima música
+    function nextSong() {
+        currentSongIndex = (currentSongIndex + 1) % songs.length;
+        loadSong(currentSongIndex);
+        playSong();
+    }
+    
+    // Atualizar a barra de progresso conforme a música toca
+    function updateProgress() {
+        const { duration, currentTime } = audio;
+        const progressPercent = (currentTime / duration) * 100;
+        progressBar.value = isNaN(progressPercent) ? 0 : progressPercent;
+
+        // Atualizar o tempo (ex: "1:32")
+        currentTimeEl.textContent = formatTime(currentTime);
+        durationEl.textContent = formatTime(duration);
+    }
+
+    // Formatar o tempo (de segundos para M:SS)
+    function formatTime(seconds) {
+        if (isNaN(seconds)) return "0:00";
+        const minutes = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
+    }
+
+    // Mudar a posição da música quando o usuário arrasta a barra de progresso
+    function setProgressFromScrub() {
+        audio.currentTime = (progressBar.value / 100) * audio.duration;
+    }
+
+    // Renderizar a lista de músicas na tela
+    function renderPlaylist() {
+        playlistEl.innerHTML = '';
+        songs.forEach((song, index) => {
+            const li = document.createElement('li');
+            li.textContent = `${song.title} - ${song.artist}`;
+            li.dataset.index = index;
+            playlistEl.appendChild(li);
+        });
+    }
+    
+    // Marcar visualmente qual música está tocando na playlist
+    function updateActivePlaylistItem() {
+        const items = document.querySelectorAll('.playlist li');
+        items.forEach((item, index) => {
+            if (index === currentSongIndex) {
+                item.classList.add('active');
+            } else {
+                item.classList.remove('active');
             }
-        }, { once: true }); // O listener é executado apenas uma vez por carregamento
+        });
+    }
+    
+    // Tocar uma música a partir do clique na playlist
+    function playFromPlaylist(e) {
+        if (e.target.tagName === 'LI') {
+            currentSongIndex = parseInt(e.target.dataset.index);
+            loadSong(currentSongIndex);
+            playSong();
+        }
+    }
 
-        // Tenta ler os metadados em paralelo
-        jsmediatags.read(songPath, {
-            onSuccess: (tag) => {
-                const tags = tag.tags;
-                trackTitle.textContent = tags.title || song.title;
-                trackArtist.textContent = tags.artist || song.artist;
+    // --- LISTA DE EVENTOS ---
+    playPauseBtn.addEventListener('click', togglePlayPause);
+    prevBtn.addEventListener('click', prevSong);
+    nextBtn.addEventListener('click', nextSong);
+    audio.addEventListener('timeupdate', updateProgress);
+    audio.addEventListener('ended', nextSong); // Toca a próxima quando a atual acabar
+    progressBar.addEventListener('input', setProgressFromScrub);
+    playlistEl.addEventListener('click', playFromPlaylist);
 
-                if (tags.picture) {
-                    const { data, format } = tags.picture;
-                    let base64String = "";
+
+    // --- INICIALIZAÇÃO ---
+    // Renderiza a lista de músicas e carrega a primeira faixa para ficar pronta.
+    renderPlaylist();
+    loadSong(currentSongIndex);
+});
                     for (let i = 0; i < data.length; i++) {
                         base64String += String.fromCharCode(data[i]);
                     }
@@ -190,3 +278,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
     initialize();
 });
+
