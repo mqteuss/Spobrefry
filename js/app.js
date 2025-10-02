@@ -20,7 +20,39 @@ document.addEventListener('DOMContentLoaded', () => {
     audio.preload = 'metadata';
     const defaultCover = 'images/default-cover.jpg';
 
-    // ===== LÓGICA DE CARREGAMENTO E PLAYBACK (CORRIGIDA) =====
+    // ===== NOVA FUNÇÃO DE PRÉ-CARREGAMENTO =====
+
+    /**
+     * Identifica a próxima música na playlist e cria uma tag <link> para
+     * instruir o navegador a pré-carregá-la em segundo plano.
+     */
+    function preloadNextSong() {
+        // Remove qualquer link de preload anterior para evitar lixo no DOM
+        const existingPreloadLink = document.getElementById('next-song-preload');
+        if (existingPreloadLink) {
+            existingPreloadLink.remove();
+        }
+
+        // Calcula o índice da próxima música, com loop para o início da playlist
+        const nextIndex = (currentSongIndex + 1) % songs.length;
+        const nextSong = songs[nextIndex];
+        
+        if (!nextSong) return; // Segurança extra
+
+        const nextSongPath = `musics/${nextSong.file}`;
+
+        // Cria o novo elemento <link>
+        const preloadLink = document.createElement('link');
+        preloadLink.id = 'next-song-preload'; // ID para facilitar a remoção posterior
+        preloadLink.rel = 'preload';
+        preloadLink.href = nextSongPath;
+        preloadLink.as = 'audio';
+
+        // Adiciona o link ao <head> do documento
+        document.head.appendChild(preloadLink);
+    }
+
+    // ===== LÓGICA DE CARREGAMENTO E PLAYBACK (COM MODIFICAÇÃO) =====
 
     function loadSong(index, shouldPlay = false) {
         albumCover.style.opacity = '0.5'; // Feedback visual de carregamento
@@ -28,6 +60,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const song = songs[index];
         const songPath = `musics/${song.file}`;
         audio.src = songPath;
+
+        // ===== CHAMADA PARA A NOVA FUNÇÃO =====
+        // Assim que uma música é carregada, iniciamos o pré-carregamento da próxima.
+        preloadNextSong();
         
         // Limpa a barra de progresso imediatamente
         progressBar.value = 0;
@@ -110,7 +146,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-    // ===== FUNÇÕES AUXILIARES (sem grandes alterações) =====
+    // ===== FUNÇÕES AUXILIARES (sem alterações) =====
 
     function updateProgress() {
         if (audio.duration) {
