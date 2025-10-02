@@ -43,6 +43,9 @@ document.addEventListener('DOMContentLoaded', () => {
         isMuted: false,
         currentTime: 0,
     };
+    
+    // --- CONTROLE DE WAKE LOCK ---
+    let wakeLock = null;
 
     // --- FUNÇÕES DE INICIALIZAÇÃO E ESTADO ---
     function init() {
@@ -52,7 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setupEventListeners();
         setupMediaSession();
         updateVolumeUI();
-        setupEqualizer(); // Configura o equalizador
+        setupEqualizer();
     }
 
     function saveState() {
@@ -77,77 +80,80 @@ document.addEventListener('DOMContentLoaded', () => {
     function initializeAudioContext() {
         if (isAudioContextInitialized) return;
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
-
-        // Fontes de áudio
         source1 = audioContext.createMediaElementSource(audio1);
         source2 = audioContext.createMediaElementSource(audio2);
-
-        // Filtros do Equalizador
         bassFilter = audioContext.createBiquadFilter();
         bassFilter.type = 'lowshelf';
-        bassFilter.frequency.value = 250; // Graves
-
+        bassFilter.frequency.value = 250;
         midFilter = audioContext.createBiquadFilter();
         midFilter.type = 'peaking';
-        midFilter.frequency.value = 1000; // Médios
+        midFilter.frequency.value = 1000;
         midFilter.Q.value = 1;
-
         trebleFilter = audioContext.createBiquadFilter();
         trebleFilter.type = 'highshelf';
-        trebleFilter.frequency.value = 4000; // Agudos
-
-        // Conecta tudo em cadeia
+        trebleFilter.frequency.value = 4000;
         source1.connect(bassFilter).connect(midFilter).connect(trebleFilter).connect(audioContext.destination);
         source2.connect(bassFilter).connect(midFilter).connect(trebleFilter).connect(audioContext.destination);
-        
         isAudioContextInitialized = true;
     }
+
+    // --- LÓGICA DE WAKE LOCK ---
+    const requestWakeLock = async () => {
+        if ('wakeLock' in navigator) {
+            try {
+                wakeLock = await navigator.wakeLock.request('screen');
+                console.log('Wake Lock ativado!');
+            } catch (err) {
+                console.error(`${err.name}, ${err.message}`);
+            }
+        }
+    };
+
+    const releaseWakeLock = async () => {
+        if (wakeLock !== null) {
+            await wakeLock.release();
+            wakeLock = null;
+            console.log('Wake Lock liberado.');
+        }
+    };
 
     // --- LÓGICA DE REPRODUÇÃO E CONTROLES ---
     function loadSong(index, shouldPlay = true) {
         state.currentSongIndex = index;
         const song = songList[index];
-
         trackTitle.textContent = song.title || "Título Desconhecido";
         trackArtist.textContent = song.artist || "Artista Desconhecido";
         albumCover.src = song.cover ? `images/${song.cover}` : 'images/default-cover.jpg';
-        
         activeAudio.src = `musics/${song.file}`;
-        
-        // --- CORREÇÃO DEFINITIVA DO TEMPO ---
-        // Se deve tocar, é uma troca de faixa, então zera o tempo.
-        // Se não, é o carregamento inicial, então usa o tempo salvo.
         if (shouldPlay) {
             activeAudio.currentTime = 0;
         } else {
             activeAudio.currentTime = state.currentTime;
         }
-        
         updateActivePlaylistItem();
         updateMediaSessionMetadata();
-        
         if (shouldPlay) play();
     }
 
     function play() {
         if (!songList.length) return;
-        // O AudioContext precisa ser iniciado por um gesto do usuário (ex: clique)
         if (!isAudioContextInitialized) {
             initializeAudioContext();
         }
         state.isPlaying = true;
-        // O AudioContext pode entrar em estado suspenso
         if (audioContext.state === 'suspended') {
             audioContext.resume();
         }
         activeAudio.play().catch(error => console.error("Erro ao tocar:", error));
         playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>';
+        requestWakeLock(); // Solicita a trava ao tocar
     }
 
     function pause() {
         state.isPlaying = false;
         activeAudio.pause();
         playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
+        releaseWakeLock(); // Libera a trava ao pausar
     }
 
     function togglePlayPause() {
@@ -175,22 +181,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function changeTrack(direction) {
         const newIndex = direction === 'next' ? getNextSongIndex() : getPrevSongIndex();
-        
         inactiveAudio.src = `musics/${songList[newIndex].file}`;
         inactiveAudio.volume = 0;
         inactiveAudio.play();
-
         let fadeInterval = setInterval(() => {
             let newActiveVolume = Math.max(0, activeAudio.volume - (1 / (CROSSFADE_TIME * 10)));
             let newInactiveVolume = Math.min(state.volume, inactiveAudio.volume + (1 / (CROSSFADE_TIME * 10)));
-            
             activeAudio.volume = newActiveVolume;
             inactiveAudio.volume = newInactiveVolume;
-            
             if (newActiveVolume <= 0) {
                 clearInterval(fadeInterval);
                 activeAudio.pause();
-                
                 [activeAudio, inactiveAudio] = [inactiveAudio, activeAudio];
                 loadSong(newIndex, true);
                 activeAudio.volume = state.volume;
@@ -222,7 +223,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const currentVolume = state.isMuted ? 0 : state.volume;
         audio1.volume = currentVolume;
         audio2.volume = currentVolume;
-
         if (state.isMuted || state.volume === 0) {
             volumeBtn.innerHTML = '<i class="fas fa-volume-xmark"></i>';
         } else if (state.volume < 0.5) {
@@ -256,72 +256,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- LÓGICA DO EQUALIZADOR ---
     function setupEqualizer() {
-        const defaultPresets = {
-            'Flat': { bass: 0, mids: 0, treble: 0 },
-            'Rock': { bass: 5, mids: -3, treble: 4 },
-            'Pop': { bass: 2, mids: 4, treble: 2 },
-            'Jazz': { bass: 3, mids: 2, treble: 5 },
-            'Clássico': { bass: -2, mids: 3, treble: 4 }
-        };
-
-        function getSavedPresets() {
-            return JSON.parse(localStorage.getItem('eqPresets')) || {};
-        }
-
+        const defaultPresets = { 'Flat': { bass: 0, mids: 0, treble: 0 }, 'Rock': { bass: 5, mids: -3, treble: 4 }, 'Pop': { bass: 2, mids: 4, treble: 2 }, 'Jazz': { bass: 3, mids: 2, treble: 5 }, 'Clássico': { bass: -2, mids: 3, treble: 4 } };
+        function getSavedPresets() { return JSON.parse(localStorage.getItem('eqPresets')) || {}; }
         function loadPresets() {
             const allPresets = { ...defaultPresets, ...getSavedPresets() };
             eqPresetsSelect.innerHTML = '';
-            for (const name in allPresets) {
-                const option = document.createElement('option');
-                option.value = name;
-                option.textContent = name;
-                eqPresetsSelect.appendChild(option);
-            }
+            for (const name in allPresets) { const option = document.createElement('option'); option.value = name; option.textContent = name; eqPresetsSelect.appendChild(option); }
         }
-
         function applyPreset(name) {
-            const allPresets = { ...defaultPresets, ...getSavedPresets() };
-            const preset = allPresets[name];
-            if (preset) {
-                eqBass.value = preset.bass;
-                eqMids.value = preset.mids;
-                eqTreble.value = preset.treble;
-                updateFilters();
-            }
+            const allPresets = { ...defaultPresets, ...getSavedPresets() }; const preset = allPresets[name];
+            if (preset) { eqBass.value = preset.bass; eqMids.value = preset.mids; eqTreble.value = preset.treble; updateFilters(); }
         }
-
         function updateFilters() {
             if (!isAudioContextInitialized) return;
-            bassFilter.gain.value = parseFloat(eqBass.value);
-            midFilter.gain.value = parseFloat(eqMids.value);
-            trebleFilter.gain.value = parseFloat(eqTreble.value);
+            bassFilter.gain.value = parseFloat(eqBass.value); midFilter.gain.value = parseFloat(eqMids.value); trebleFilter.gain.value = parseFloat(eqTreble.value);
         }
-        
         eqBass.addEventListener('input', updateFilters);
         eqMids.addEventListener('input', updateFilters);
         eqTreble.addEventListener('input', updateFilters);
         eqPresetsSelect.addEventListener('change', (e) => applyPreset(e.target.value));
-
         savePresetBtn.addEventListener('click', () => {
-            const name = eqPresetName.value.trim();
-            if (!name) {
-                alert('Por favor, digite um nome para o preset.');
-                return;
-            }
-            const savedPresets = getSavedPresets();
-            savedPresets[name] = {
-                bass: parseFloat(eqBass.value),
-                mids: parseFloat(eqMids.value),
-                treble: parseFloat(eqTreble.value)
-            };
-            localStorage.setItem('eqPresets', JSON.stringify(savedPresets));
-            eqPresetName.value = '';
-            loadPresets();
-            eqPresetsSelect.value = name; // Seleciona o preset recém-salvo
+            const name = eqPresetName.value.trim(); if (!name) { alert('Por favor, digite um nome para o preset.'); return; }
+            const savedPresets = getSavedPresets(); savedPresets[name] = { bass: parseFloat(eqBass.value), mids: parseFloat(eqMids.value), treble: parseFloat(eqTreble.value) };
+            localStorage.setItem('eqPresets', JSON.stringify(savedPresets)); eqPresetName.value = ''; loadPresets(); eqPresetsSelect.value = name;
         });
-        
-        loadPresets();
-        applyPreset('Flat'); // Aplica o preset padrão ao iniciar
+        loadPresets(); applyPreset('Flat');
     }
 
     // --- EVENT LISTENERS ---
@@ -329,45 +288,22 @@ document.addEventListener('DOMContentLoaded', () => {
         playPauseBtn.addEventListener('click', togglePlayPause);
         nextBtn.addEventListener('click', () => changeTrack('next'));
         prevBtn.addEventListener('click', () => changeTrack('prev'));
-        
-        shuffleBtn.addEventListener('click', () => {
-            state.isShuffle = !state.isShuffle;
-            shuffleBtn.classList.toggle('active', state.isShuffle);
-            saveState();
-        });
-
+        shuffleBtn.addEventListener('click', () => { state.isShuffle = !state.isShuffle; shuffleBtn.classList.toggle('active', state.isShuffle); saveState(); });
         [audio1, audio2].forEach(audio => {
             audio.addEventListener('timeupdate', () => { if (audio === activeAudio) updateProgress(); });
-            audio.addEventListener('ended', () => { if (audio === activeAudio) changeTrack('next'); });
+            audio.addEventListener('ended', () => { if (audio === activeAudio) { releaseWakeLock(); changeTrack('next'); } }); // Libera trava ao terminar
             audio.addEventListener('loadedmetadata', () => { if (audio === activeAudio) updateProgress(); });
         });
-        
-        progressBar.addEventListener('input', (e) => {
-            const { duration } = activeAudio;
-            if (duration) activeAudio.currentTime = (e.target.value / 100) * duration;
-        });
-
-        volumeSlider.addEventListener('input', e => {
-            state.volume = parseFloat(e.target.value);
-            state.isMuted = state.volume === 0;
-            updateVolumeUI();
-            saveState();
-        });
-        volumeBtn.addEventListener('click', () => {
-            state.isMuted = !state.isMuted;
-            updateVolumeUI();
-            saveState();
-        });
-
+        progressBar.addEventListener('input', (e) => { const { duration } = activeAudio; if (duration) activeAudio.currentTime = (e.target.value / 100) * duration; });
+        volumeSlider.addEventListener('input', e => { state.volume = parseFloat(e.target.value); state.isMuted = state.volume === 0; updateVolumeUI(); saveState(); });
+        volumeBtn.addEventListener('click', () => { state.isMuted = !state.isMuted; updateVolumeUI(); saveState(); });
         searchInput.addEventListener('input', e => {
             const searchTerm = e.target.value.toLowerCase();
             document.querySelectorAll('.playlist li').forEach(li => {
-                const title = li.querySelector('.song-title').textContent.toLowerCase();
-                const artist = li.querySelector('.song-artist').textContent.toLowerCase();
+                const title = li.querySelector('.song-title').textContent.toLowerCase(); const artist = li.querySelector('.song-artist').textContent.toLowerCase();
                 li.style.display = (title.includes(searchTerm) || artist.includes(searchTerm)) ? '' : 'none';
             });
         });
-        
         setInterval(saveState, 5000);
     }
 
@@ -375,44 +311,22 @@ document.addEventListener('DOMContentLoaded', () => {
     function setupDragAndDrop() {
         let draggedIndex = null;
         playlistEl.querySelectorAll('li').forEach(item => {
-            item.addEventListener('dragstart', e => {
-                draggedIndex = parseInt(e.currentTarget.dataset.index);
-                e.currentTarget.classList.add('dragging');
-            });
+            item.addEventListener('dragstart', e => { draggedIndex = parseInt(e.currentTarget.dataset.index); e.currentTarget.classList.add('dragging'); });
             item.addEventListener('dragend', e => e.currentTarget.classList.remove('dragging'));
-            item.addEventListener('dragover', e => {
-                e.preventDefault();
-                e.currentTarget.classList.add('drag-over');
-            });
+            item.addEventListener('dragover', e => { e.preventDefault(); e.currentTarget.classList.add('drag-over'); });
             item.addEventListener('dragleave', e => e.currentTarget.classList.remove('drag-over'));
             item.addEventListener('drop', e => {
-                e.preventDefault();
-                e.currentTarget.classList.remove('drag-over');
-                const droppedIndex = parseInt(e.currentTarget.dataset.index);
-                if (draggedIndex === droppedIndex) return;
-                
-                const [draggedItem] = songList.splice(draggedIndex, 1);
-                songList.splice(droppedIndex, 0, draggedItem);
-                
-                // Atualiza o índice da música atual
-                if (state.currentSongIndex === draggedIndex) {
-                    state.currentSongIndex = droppedIndex;
-                } else if (draggedIndex < state.currentSongIndex && droppedIndex >= state.currentSongIndex) {
-                    state.currentSongIndex--;
-                } else if (draggedIndex > state.currentSongIndex && droppedIndex <= state.currentSongIndex) {
-                    state.currentSongIndex++;
-                }
-
-                renderPlaylist();
-                saveState();
+                e.preventDefault(); e.currentTarget.classList.remove('drag-over');
+                const droppedIndex = parseInt(e.currentTarget.dataset.index); if (draggedIndex === droppedIndex) return;
+                const [draggedItem] = songList.splice(draggedIndex, 1); songList.splice(droppedIndex, 0, draggedItem);
+                if (state.currentSongIndex === draggedIndex) { state.currentSongIndex = droppedIndex; }
+                else if (draggedIndex < state.currentSongIndex && droppedIndex >= state.currentSongIndex) { state.currentSongIndex--; }
+                else if (draggedIndex > state.currentSongIndex && droppedIndex <= state.currentSongIndex) { state.currentSongIndex++; }
+                renderPlaylist(); saveState();
             });
             item.addEventListener('click', e => {
                 const index = parseInt(e.currentTarget.dataset.index);
-                if (index === state.currentSongIndex) {
-                    togglePlayPause();
-                } else {
-                    loadSong(index, true);
-                }
+                if (index === state.currentSongIndex) { togglePlayPause(); } else { loadSong(index, true); }
             });
         });
     }
@@ -428,8 +342,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     function updateMediaSessionMetadata() {
         if ('mediaSession' in navigator) {
-            const song = songList[state.currentSongIndex];
-            if (!song) return;
+            const song = songList[state.currentSongIndex]; if (!song) return;
             navigator.mediaSession.metadata = new MediaMetadata({
                 title: song.title,
                 artist: song.artist,
