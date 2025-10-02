@@ -52,7 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setupEventListeners();
         setupMediaSession();
         updateVolumeUI();
-        setupEqualizer();
+        setupEqualizer(); 
     }
 
     function saveState() {
@@ -73,12 +73,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- INICIALIZAÇÃO DO CONTEXTO DE ÁUDIO (CRUCIAL PARA IOS/ANDROID) ---
+    // --- INICIALIZAÇÃO DO CONTEXTO DE ÁUDIO ---
     function initializeAudioContext() {
         if (isAudioContextInitialized) return;
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
         
-        // Tenta 'desbloquear' o contexto no iOS/Chrome mais recente
+        // Tenta 'desbloquear' o contexto no iOS/Chrome mais recente (Compatibilidade)
         if (audioContext.state === 'suspended') {
             audioContext.resume().catch(e => console.error("Erro ao resumir AudioContext:", e));
         }
@@ -106,6 +106,9 @@ document.addEventListener('DOMContentLoaded', () => {
         source2.connect(bassFilter).connect(midFilter).connect(trebleFilter).connect(audioContext.destination);
         
         isAudioContextInitialized = true;
+        
+        // Aplica os valores dos sliders imediatamente após criar os filtros
+        updateFilters(); 
     }
 
     // --- LÓGICA DE REPRODUÇÃO E CONTROLES ---
@@ -119,7 +122,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         activeAudio.src = `musics/${song.file}`;
         
-        // Mantém o tempo de reprodução ao carregar, se não for uma troca de faixa.
         if (shouldPlay) {
             activeAudio.currentTime = 0;
         } else {
@@ -145,15 +147,24 @@ document.addEventListener('DOMContentLoaded', () => {
         state.isPlaying = true;
         activeAudio.play().catch(error => {
             console.error("Erro ao tocar:", error);
-            // Isso geralmente acontece se não houver interação do usuário para iniciar a reprodução.
         });
         playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>';
+
+        // CORREÇÃO: Notifica o sistema que estamos TOCANDO
+        if ('mediaSession' in navigator) {
+            navigator.mediaSession.playbackState = 'playing';
+        }
     }
 
     function pause() {
         state.isPlaying = false;
         activeAudio.pause();
         playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
+        
+        // CORREÇÃO: Notifica o sistema que PAUSAMOS
+        if ('mediaSession' in navigator) {
+            navigator.mediaSession.playbackState = 'paused';
+        }
     }
 
     function togglePlayPause() {
@@ -185,7 +196,6 @@ document.addEventListener('DOMContentLoaded', () => {
         inactiveAudio.src = `musics/${songList[newIndex].file}`;
         inactiveAudio.volume = 0;
         
-        // Garante que o contexto está ativo antes de tentar tocar
         if (!isAudioContextInitialized) {
             initializeAudioContext();
         } else if (audioContext.state === 'suspended') {
@@ -195,8 +205,8 @@ document.addEventListener('DOMContentLoaded', () => {
         inactiveAudio.play();
 
         let fadeInterval = setInterval(() => {
-            let newActiveVolume = Math.max(0, activeAudio.volume - (1 / (CROSSFADE_TIME * 10)));
-            let newInactiveVolume = Math.min(state.volume, inactiveAudio.volume + (1 / (CROSSFADE_TIME * 10)));
+            let newActiveVolume = Math.max(0, activeAudio.volume - (state.volume / (CROSSFADE_TIME * 10)));
+            let newInactiveVolume = Math.min(state.volume, inactiveAudio.volume + (state.volume / (CROSSFADE_TIME * 10)));
             
             activeAudio.volume = newActiveVolume;
             inactiveAudio.volume = newInactiveVolume;
@@ -300,12 +310,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 eqBass.value = preset.bass;
                 eqMids.value = preset.mids;
                 eqTreble.value = preset.treble;
-                updateFilters();
+                // Aplica aos filtros SOMENTE se o AudioContext já estiver inicializado
+                if (isAudioContextInitialized) { 
+                    updateFilters(); 
+                }
             }
         }
 
         function updateFilters() {
-            if (!isAudioContextInitialized) return;
+            // Verifica se o objeto bassFilter existe antes de tentar acessar suas propriedades
+            if (!bassFilter) return; 
+            
             bassFilter.gain.value = parseFloat(eqBass.value);
             midFilter.gain.value = parseFloat(eqMids.value);
             trebleFilter.gain.value = parseFloat(eqTreble.value);
@@ -335,7 +350,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         loadPresets();
-        applyPreset('Flat'); 
+        applyPreset('Flat'); // Define os valores iniciais nos sliders DOM
     }
 
     // --- EVENT LISTENERS ---
@@ -354,12 +369,12 @@ document.addEventListener('DOMContentLoaded', () => {
             audio.addEventListener('timeupdate', () => { 
                 if (audio === activeAudio) {
                     updateProgress();
-                    // CRUCIAL: Atualiza o estado da posição para Dynamic Island/Controles de Mídia
+                    // Atualiza o estado da posição para Dynamic Island/Controles de Mídia
                     if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession && !isNaN(audio.duration)) {
                         navigator.mediaSession.setPositionState({
                             duration: audio.duration,
                             position: audio.currentTime,
-                            playbackRate: audio.playbackRate || 1 // Garante que playbackRate não é null
+                            playbackRate: audio.playbackRate || 1
                         });
                     }
                 }
@@ -420,7 +435,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const [draggedItem] = songList.splice(draggedIndex, 1);
                 songList.splice(droppedIndex, 0, draggedItem);
                 
-                // Atualiza o índice da música atual
                 if (state.currentSongIndex === draggedIndex) {
                     state.currentSongIndex = droppedIndex;
                 } else if (draggedIndex < state.currentSongIndex && droppedIndex >= state.currentSongIndex) {
@@ -443,29 +457,51 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- MEDIA SESSION API (CRUCIAL PARA DYNAMIC ISLAND/CONTROLES NATIVOS) ---
+    // --- MEDIA SESSION API (DYNAMIC ISLAND/CONTROLES NATIVOS) ---
     function setupMediaSession() {
         if ('mediaSession' in navigator) {
-            navigator.mediaSession.setActionHandler('play', play);
-            navigator.mediaSession.setActionHandler('pause', pause);
+            
+            // CORREÇÃO: Usamos callbacks explícitos, que são cruciais para que o SO mantenha 
+            // a PWA viva em background e processe os comandos de Play/Pause.
+
+            navigator.mediaSession.setActionHandler('play', () => {
+                if (activeAudio.paused) {
+                    play(); 
+                }
+            });
+            
+            navigator.mediaSession.setActionHandler('pause', () => {
+                if (!activeAudio.paused) {
+                    pause();
+                }
+            });
+            
             navigator.mediaSession.setActionHandler('previoustrack', () => changeTrack('prev'));
             navigator.mediaSession.setActionHandler('nexttrack', () => changeTrack('next'));
             
-            // Adiciona manipuladores para controles de avanço/retrocesso (Dynamic Island/Controles de Mídia)
+            // CORREÇÃO: Adicionamos os Handlers de busca (Seek) para permitir o controle de progresso
             navigator.mediaSession.setActionHandler('seekto', details => {
                 const seekTime = details.seekTime;
                 if (typeof seekTime === 'number' && !isNaN(activeAudio.duration)) {
                     activeAudio.currentTime = seekTime;
                 }
             });
+
             navigator.mediaSession.setActionHandler('seekbackward', details => {
-                activeAudio.currentTime = activeAudio.currentTime - (details.seekOffset || 10);
-            });
-            navigator.mediaSession.setActionHandler('seekforward', details => {
-                activeAudio.currentTime = activeAudio.currentTime + (details.seekOffset || 10);
+                activeAudio.currentTime = Math.max(activeAudio.currentTime - (details.seekOffset || 10), 0);
             });
             
-            // Previne que o sistema de mídia use o volume padrão do áudio em favor do controle do app
+            navigator.mediaSession.setActionHandler('seekforward', details => {
+                activeAudio.currentTime = Math.min(activeAudio.currentTime + (details.seekOffset || 10), activeAudio.duration);
+            });
+            
+            // Handler para 'stop' (opcional, mas recomendado)
+            navigator.mediaSession.setActionHandler('stop', () => {
+                pause();
+                activeAudio.currentTime = 0;
+            });
+            
+            // setvolume é null porque o volume é controlado nativamente pelo sistema.
             navigator.mediaSession.setActionHandler('setvolume', null);
         }
     }
@@ -475,13 +511,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const song = songList[state.currentSongIndex];
             if (!song) return;
             
-            // CRUCIAL: Cria um URL absoluto para a capa para que o SO possa carregá-la na tela de bloqueio
             const coverUrl = albumCover.src.startsWith('http') ? albumCover.src : new URL(albumCover.src, window.location.href).href;
 
             navigator.mediaSession.metadata = new MediaMetadata({
                 title: song.title,
                 artist: song.artist,
-                // Alta resolução é ideal para Dynamic Island e tela de bloqueio
                 artwork: [{ 
                     src: coverUrl, 
                     sizes: '512x512', 
