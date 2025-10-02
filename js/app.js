@@ -17,169 +17,152 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentSongIndex = 0;
     let isPlaying = false;
     let isShuffle = false;
-    let currentCoverUrl = null; // NOVO: Para gerenciar a URL da capa e evitar memory leaks
     const audio = new Audio();
     const preloadAudio = new Audio();
 
-    // --- FUNÇÕES DE CONTROLE DE MÚSICA ---
+    // --- NOVO: WEB AUDIO API ---
+    let audioContext;
+    let sourceNode;
+    let bassFilter, midFilter, trebleFilter;
+    let audioApiInitialized = false;
 
     /**
-     * Carrega uma música, tentando ler seus metadados (capa, álbum) primeiro.
-     * @param {number} index - O índice da música na playlist.
+     * NOVO: Inicializa a Web Audio API.
+     * Isso só pode acontecer após uma interação do usuário (como o primeiro clique no play).
      */
-    function loadSong(index) {
-        // NOVO: Limpa a URL do objeto da capa anterior para liberar memória
-        if (currentCoverUrl) {
-            URL.revokeObjectURL(currentCoverUrl);
-            currentCoverUrl = null;
-        }
+    function setupAudioAPI() {
+        if (audioApiInitialized) return;
+        
+        // 1. Cria o Contexto de Áudio principal
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
+        // 2. Cria a Fonte: conecta nosso elemento <audio> à API
+        sourceNode = audioContext.createMediaElementSource(audio);
+
+        // 3. Cria os Filtros do Equalizador
+        bassFilter = audioContext.createBiquadFilter();
+        bassFilter.type = 'lowshelf'; // Filtro para frequências baixas (graves)
+        bassFilter.frequency.value = 300; // Afeta frequências abaixo de 300 Hz
+
+        midFilter = audioContext.createBiquadFilter();
+        midFilter.type = 'peaking'; // Filtro para uma faixa de frequências médias
+        midFilter.frequency.value = 1200; // Frequência central em 1200 Hz
+        midFilter.Q.value = 1; // "Largura" do filtro
+
+        trebleFilter = audioContext.createBiquadFilter();
+        trebleFilter.type = 'highshelf'; // Filtro para frequências altas (agudos)
+        trebleFilter.frequency.value = 4000; // Afeta frequências acima de 4000 Hz
+
+        // 4. Conecta os nós em cadeia: Fonte -> Filtros -> Alto-falantes
+        sourceNode.connect(bassFilter);
+        bassFilter.connect(midFilter);
+        midFilter.connect(trebleFilter);
+        trebleFilter.connect(audioContext.destination);
+
+        audioApiInitialized = true;
+        console.log("Web Audio API inicializada.");
+    }
+
+    // --- FUNÇÕES DE CONTROLE DE MÚSICA ---
+
+    function loadSong(index) {
         const song = songs[index];
         trackTitle.textContent = song.title || "Título Desconhecido";
         trackArtist.textContent = song.artist || "Artista Desconhecido";
-        trackAlbum.textContent = ''; // Limpa o álbum antes de tentar carregar
-        albumCover.src = 'images/default-cover.jpg'; // Reseta para a padrão
-        
+        albumCover.src = song.cover ? `images/${song.cover}` : 'images/default-cover.jpg';
         audio.src = `musics/${song.file}`;
-        
-        // NOVO: Usa jsmediatags para ler metadados do arquivo MP3
-        const jsmediatags = window.jsmediatags;
-        jsmediatags.read(audio.src, {
-            onSuccess: function(tag) {
-                console.log("Metadados lidos:", tag);
-                const tags = tag.tags;
-
-                // Define o título do álbum se existir
-                if (tags.album) {
-                    trackAlbum.textContent = tags.album;
-                }
-                
-                // Define a capa do álbum se existir
-                if (tags.picture) {
-                    const { data, format } = tags.picture;
-                    const base64String = data.reduce((acc, byte) => acc + String.fromCharCode(byte), '');
-                    const imageUrl = `data:${format};base64,${window.btoa(base64String)}`;
-                    albumCover.src = imageUrl;
-                }
-                updateMediaSessionMetadata(); // Atualiza metadados com as novas infos
-            },
-            onError: function(error) {
-                console.log('Erro ao ler metadados:', error.type, error.info);
-                // Se falhar, usa a capa definida no song-list.js ou a padrão
-                albumCover.src = song.cover ? `images/${song.cover}` : 'images/default-cover.jpg';
-                updateMediaSessionMetadata();
-            }
-        });
-        
         updateActivePlaylistItem();
+        updateMediaSessionMetadata();
     }
 
-    /**
-     * Toca a música atual e pré-carrega a próxima.
-     */
     function playSong() {
+        // NOVO: Inicializa a API no primeiro play
+        if (!audioApiInitialized) {
+            setupAudioAPI();
+        }
+        // Garante que o AudioContext seja retomado (necessário em alguns navegadores)
+        if (audioContext && audioContext.state === 'suspended') {
+            audioContext.resume();
+        }
         audio.play().catch(error => console.error("Erro ao tocar a música:", error));
         preloadNextSong();
     }
 
-    /**
-     * Pausa a música atual.
-     */
     function pauseSong() {
         audio.pause();
     }
-    
-    /**
-     * NOVO: Função central para trocar de faixa com efeito de fade.
-     * @param {number} newIndex - O índice da nova música a ser tocada.
-     */
-    function fadeAndChangeTrack(newIndex) {
-        if (audio.duration && isPlaying) {
-            let currentVolume = audio.volume;
-            const fadeOutInterval = setInterval(() => {
-                currentVolume = Math.max(0, currentVolume - 0.1);
-                audio.volume = currentVolume;
-                if (currentVolume <= 0) {
-                    clearInterval(fadeOutInterval);
-                    currentSongIndex = newIndex;
-                    loadSong(currentSongIndex);
-                    // O 'playSong' será chamado pelo evento 'loadeddata' para garantir que a música esteja pronta
-                }
-            }, 40); // Diminui o volume a cada 40ms
+
+    function togglePlayPause() {
+        if (isPlaying) {
+            pauseSong();
         } else {
-            // Se não estiver tocando, troca a música instantaneamente
-            currentSongIndex = newIndex;
+            playSong();
+        }
+    }
+
+    function prevSong() {
+        if (isShuffle) {
+            playRandomSong();
+        } else {
+            currentSongIndex = (currentSongIndex - 1 + songs.length) % songs.length;
+            loadSong(currentSongIndex);
+            playSong();
+        }
+    }
+
+    function nextSong() {
+        if (isShuffle) {
+            playRandomSong();
+        } else {
+            currentSongIndex = (currentSongIndex + 1) % songs.length;
             loadSong(currentSongIndex);
             playSong();
         }
     }
     
-    // NOVO: Listener para o evento 'loadeddata', que dispara quando a música está pronta para tocar
-    audio.addEventListener('loadeddata', () => {
-        // Garante que o fade-in só aconteça se a música foi iniciada
-        if (isPlaying) {
-            fadeInAudio();
-        }
-    });
-
-    /**
-     * NOVO: Aumenta gradualmente o volume da música (fade-in).
-     */
-    function fadeInAudio() {
-        audio.volume = 0; // Começa com volume 0
-        playSong();
-        let currentVolume = 0;
-        const fadeInInterval = setInterval(() => {
-            currentVolume = Math.min(1, currentVolume + 0.1);
-            audio.volume = currentVolume;
-            if (currentVolume >= 1) {
-                clearInterval(fadeInInterval);
-            }
-        }, 40);
-    }
-    
-    function togglePlayPause() {
-        isPlaying ? pauseSong() : playSong();
-    }
-    
-    function prevSong() {
-        const newIndex = isShuffle ? getRandomIndex() : (currentSongIndex - 1 + songs.length) % songs.length;
-        fadeAndChangeTrack(newIndex);
-    }
-
-    function nextSong() {
-        const newIndex = isShuffle ? getRandomIndex() : (currentSongIndex + 1) % songs.length;
-        fadeAndChangeTrack(newIndex);
-    }
-
-    function getRandomIndex() {
+    function playRandomSong() {
         let randomIndex;
-        if (songs.length <= 1) return 0;
-        do {
-            randomIndex = Math.floor(Math.random() * songs.length);
-        } while (randomIndex === currentSongIndex);
-        return randomIndex;
+        if (songs.length > 1) {
+            do {
+                randomIndex = Math.floor(Math.random() * songs.length);
+            } while (randomIndex === currentSongIndex);
+        } else {
+            randomIndex = 0;
+        }
+        currentSongIndex = randomIndex;
+        loadSong(currentSongIndex);
+        playSong();
     }
     
     function toggleShuffle() {
         isShuffle = !isShuffle;
         shuffleBtn.classList.toggle('active', isShuffle);
     }
-
+    
     function preloadNextSong() {
         if (songs.length > 1) {
-            const nextIndex = isShuffle ? getRandomIndex() : (currentSongIndex + 1) % songs.length;
+            let nextIndex;
+            if (isShuffle) {
+                do {
+                    nextIndex = Math.floor(Math.random() * songs.length);
+                } while (nextIndex === currentSongIndex);
+            } else {
+                nextIndex = (currentSongIndex + 1) % songs.length;
+            }
             preloadAudio.src = `musics/${songs[nextIndex].file}`;
         }
     }
 
     // --- ATUALIZAÇÕES DE INTERFACE ---
+
     function updateProgress() {
         const { duration, currentTime } = audio;
         const progressPercent = (currentTime / duration) * 100;
         progressBar.value = isNaN(progressPercent) ? 0 : progressPercent;
         currentTimeEl.textContent = formatTime(currentTime);
-        if (duration) durationEl.textContent = formatTime(duration);
+        if(duration) {
+            durationEl.textContent = formatTime(duration);
+        }
     }
 
     function formatTime(seconds) {
@@ -191,7 +174,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function setProgressFromScrub(e) {
         const newTime = (e.target.value / 100) * audio.duration;
-        if (!isNaN(newTime)) audio.currentTime = newTime;
+        if (!isNaN(newTime)) {
+            audio.currentTime = newTime;
+        }
     }
 
     function renderPlaylist() {
@@ -199,28 +184,32 @@ document.addEventListener('DOMContentLoaded', () => {
         songs.forEach((song, index) => {
             const li = document.createElement('li');
             li.dataset.index = index;
-            li.innerHTML = `<span class="song-title">${song.title}</span><span class="song-artist">${song.artist}</span>`;
+            li.innerHTML = `
+                <span class="song-title">${song.title}</span>
+                <span class="song-artist">${song.artist}</span>
+            `;
             playlistEl.appendChild(li);
         });
     }
-
+    
     function updateActivePlaylistItem() {
-        document.querySelectorAll('.playlist li').forEach((item, index) => {
+        const items = document.querySelectorAll('.playlist li');
+        items.forEach((item, index) => {
             item.classList.toggle('active', index === currentSongIndex);
         });
     }
-
+    
     function playFromPlaylist(e) {
         const targetLi = e.target.closest('li');
         if (targetLi) {
-            const newIndex = parseInt(targetLi.dataset.index);
-            if (newIndex !== currentSongIndex) {
-                 fadeAndChangeTrack(newIndex);
-            }
+            currentSongIndex = parseInt(targetLi.dataset.index);
+            loadSong(currentSongIndex);
+            playSong();
         }
     }
 
     // --- SINCRONIZAÇÃO DE ESTADO E MEDIA SESSION API ---
+
     function syncPlayState() {
         isPlaying = true;
         playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>';
@@ -244,10 +233,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if ('mediaSession' in navigator) {
             const song = songs[currentSongIndex];
             navigator.mediaSession.metadata = new MediaMetadata({
-                title: trackTitle.textContent,
-                artist: trackArtist.textContent,
-                album: trackAlbum.textContent,
-                artwork: [{ src: albumCover.src, sizes: '512x512', type: 'image/jpeg' }]
+                title: song.title,
+                artist: song.artist,
+                album: song.album || '',
+                artwork: [
+                    { src: albumCover.src, sizes: '512x512', type: 'image/jpeg' }
+                ]
             });
         }
     }
@@ -257,13 +248,28 @@ document.addEventListener('DOMContentLoaded', () => {
     prevBtn.addEventListener('click', prevSong);
     nextBtn.addEventListener('click', nextSong);
     shuffleBtn.addEventListener('click', toggleShuffle);
+    
     audio.addEventListener('play', syncPlayState);
     audio.addEventListener('pause', syncPauseState);
+    
     audio.addEventListener('timeupdate', updateProgress);
     audio.addEventListener('ended', nextSong);
     audio.addEventListener('loadedmetadata', updateProgress);
+
     progressBar.addEventListener('input', setProgressFromScrub);
+    
     playlistEl.addEventListener('click', playFromPlaylist);
+
+    // NOVO: Event listeners para os sliders do Equalizador
+    document.getElementById('eq-bass').addEventListener('input', (e) => {
+        if (bassFilter) bassFilter.gain.value = e.target.value;
+    });
+    document.getElementById('eq-mids').addEventListener('input', (e) => {
+        if (midFilter) midFilter.gain.value = e.target.value;
+    });
+    document.getElementById('eq-treble').addEventListener('input', (e) => {
+        if (trebleFilter) trebleFilter.gain.value = e.target.value;
+    });
 
     // --- INICIALIZAÇÃO ---
     renderPlaylist();
