@@ -1,6 +1,6 @@
 {
     "name": "Offline Music Player",
-    "short_name": "Music Player",
+    "short_name": "Spobrefy",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#121212",
