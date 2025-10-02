@@ -1,0 +1,21 @@
+{
+    "name": "Offline Music Player",
+    "short_name": "Music Player",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#121212",
+    "theme_color": "#181818",
+    "description": "Um player de música offline que roda no seu navegador.",
+    "icons": [
+        {
+            "src": "icons/icon-192x192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/icon-512x512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}
