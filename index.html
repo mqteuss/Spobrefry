@@ -3,66 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Music Player</title>
+    <title>Offline Music Player</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body>
 
-    <div class="main-container">
-        <div class="player-container">
-            <div class="player-body">
-                <div class="album-art">
-                    <img src="images/default-cover.jpg" alt="Capa do Álbum" id="album-cover">
-                </div>
-                <div class="track-info">
-                    <h2 class="track-title" id="track-title">Bem-vindo!</h2>
-                    <h3 class="track-artist" id="track-artist">Selecione uma música na playlist</h3>
-                </div>
-                <div class="progress-container">
-                    <span id="current-time">0:00</span>
-                    <input type="range" class="progress-bar" id="progress-bar" value="0" step="1">
-                    <span id="duration">0:00</span>
-                </div>
-                <div class="controls">
-    <button id="prev-btn" class="control-btn">
-        <i class="fas fa-backward"></i>
-    </button>
-    <button id="play-pause-btn" class="control-btn play">
-        <i class="fas fa-play"></i>
-    </button>
-    <button id="next-btn" class="control-btn">
-        <i class="fas fa-forward"></i>
-    </button>
-</div>
+    <div class="player-container">
+        <div class="track-details">
+            <img src="images/default-cover.png" alt="Capa do Álbum" class="album-cover" id="album-cover">
+            <h2 class="track-title" id="track-title">Selecione uma música</h2>
+            <h3 class="track-artist" id="track-artist">...</h3>
+        </div>
 
-<div class="controls">
-    <button id="shuffle-btn" class="control-btn">
-        <i class="fas fa-shuffle"></i>
-    </button>
-    <button id="prev-btn" class="control-btn">
-        <i class="fas fa-backward"></i>
-    </button>
-    <button id="play-pause-btn" class="control-btn play">
-        <i class="fas fa-play"></i>
-    </button>
-    <button id="next-btn" class="control-btn">
-        <i class="fas fa-forward"></i>
-    </button>
-</div>
+        <div class="progress-container">
+            <span id="current-time">0:00</span>
+            <input type="range" class="progress-bar" id="progress-bar" value="0" step="1">
+            <span id="duration">0:00</span>
+        </div>
 
-        <div class="playlist-container">
-            <h3>Sua Playlist</h3>
-            <ul class="playlist" id="playlist">
-                </ul>
+        <div class="controls">
+            <button id="shuffle-btn" class="control-btn">
+                <i class="fas fa-shuffle"></i>
+            </button>
+            <button id="prev-btn" class="control-btn">
+                <i class="fas fa-backward"></i>
+            </button>
+            <button id="play-pause-btn" class="control-btn play">
+                <i class="fas fa-play"></i>
+            </button>
+            <button id="next-btn" class="control-btn">
+                <i class="fas fa-forward"></i>
+            </button>
         </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
+    <div class="playlist-container">
+        <h3>Playlist</h3>
+        <ul class="playlist" id="playlist">
+            </ul>
+    </div>
 
     <script src="js/song-list.js"></script>
     <script src="js/app.js"></script>
 
 </body>
-
 </html>
