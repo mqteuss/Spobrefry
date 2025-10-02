@@ -97,14 +97,14 @@ document.addEventListener('DOMContentLoaded', () => {
         isAudioContextInitialized = true;
     }
 
-    // --- LÓGICA DE WAKE LOCK ---
+    // --- LÓGICA DE WAKE LOCK (MAIS ROBUSTA) ---
     const requestWakeLock = async () => {
-        if ('wakeLock' in navigator) {
+        if ('wakeLock' in navigator && !wakeLock) {
             try {
                 wakeLock = await navigator.wakeLock.request('screen');
                 console.log('Wake Lock ativado!');
             } catch (err) {
-                console.error(`${err.name}, ${err.message}`);
+                console.error(`Wake Lock falhou: ${err.name}, ${err.message}`);
             }
         }
     };
@@ -140,20 +140,29 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!isAudioContextInitialized) {
             initializeAudioContext();
         }
-        state.isPlaying = true;
         if (audioContext.state === 'suspended') {
             audioContext.resume();
         }
-        activeAudio.play().catch(error => console.error("Erro ao tocar:", error));
-        playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>';
-        requestWakeLock(); // Solicita a trava ao tocar
+        
+        const playPromise = activeAudio.play();
+        if (playPromise !== undefined) {
+            playPromise.then(() => {
+                state.isPlaying = true;
+                playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>';
+                requestWakeLock();
+            }).catch(error => {
+                console.error("Erro ao iniciar a reprodução:", error);
+                state.isPlaying = false;
+                playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
+            });
+        }
     }
 
     function pause() {
         state.isPlaying = false;
         activeAudio.pause();
         playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
-        releaseWakeLock(); // Libera a trava ao pausar
+        releaseWakeLock();
     }
 
     function togglePlayPause() {
@@ -183,7 +192,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const newIndex = direction === 'next' ? getNextSongIndex() : getPrevSongIndex();
         inactiveAudio.src = `musics/${songList[newIndex].file}`;
         inactiveAudio.volume = 0;
-        inactiveAudio.play();
+        
+        const playPromise = inactiveAudio.play();
+        if (playPromise !== undefined) {
+            playPromise.catch(e => console.error("Erro no áudio inativo:", e));
+        }
+
         let fadeInterval = setInterval(() => {
             let newActiveVolume = Math.max(0, activeAudio.volume - (1 / (CROSSFADE_TIME * 10)));
             let newInactiveVolume = Math.min(state.volume, inactiveAudio.volume + (1 / (CROSSFADE_TIME * 10)));
@@ -291,7 +305,7 @@ document.addEventListener('DOMContentLoaded', () => {
         shuffleBtn.addEventListener('click', () => { state.isShuffle = !state.isShuffle; shuffleBtn.classList.toggle('active', state.isShuffle); saveState(); });
         [audio1, audio2].forEach(audio => {
             audio.addEventListener('timeupdate', () => { if (audio === activeAudio) updateProgress(); });
-            audio.addEventListener('ended', () => { if (audio === activeAudio) { releaseWakeLock(); changeTrack('next'); } }); // Libera trava ao terminar
+            audio.addEventListener('ended', () => { if (audio === activeAudio) { releaseWakeLock(); changeTrack('next'); } });
             audio.addEventListener('loadedmetadata', () => { if (audio === activeAudio) updateProgress(); });
         });
         progressBar.addEventListener('input', (e) => { const { duration } = activeAudio; if (duration) activeAudio.currentTime = (e.target.value / 100) * duration; });
@@ -304,6 +318,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 li.style.display = (title.includes(searchTerm) || artist.includes(searchTerm)) ? '' : 'none';
             });
         });
+        
+        // --- NOVO: Listener para reativar o app ---
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && state.isPlaying) {
+                // Se o app volta a ser visível e deveria estar tocando,
+                // re-solicita o wake lock e garante que o áudio toque.
+                requestWakeLock();
+                if(activeAudio.paused) {
+                    play();
+                }
+            }
+        });
+        
         setInterval(saveState, 5000);
     }
 
