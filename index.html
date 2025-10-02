@@ -2,11 +2,16 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Spobrefy</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Music Player</title>
     <meta name="theme-color" content="#181818"/>
-    <link rel="manifest" href="manifest.json">
 
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Music Player">
+    <link rel="apple-touch-icon" href="icons/icon-192x192.png">
+    
+    <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
@@ -19,7 +24,7 @@
                     <img src="images/default-cover.jpg" alt="Capa do Álbum" id="album-cover">
                 </div>
                 <div class="track-info">
-                    <h2 class="track-title" id="track-title">Bem-vindo ao Spobrefy!</h2>
+                    <h2 class="track-title" id="track-title">Bem-vindo!</h2>
                     <h3 class="track-artist" id="track-artist">Selecione uma música na playlist</h3>
                 </div>
                 <div class="progress-container">
