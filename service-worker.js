@@ -1,4 +1,4 @@
-const CACHE_NAME = 'spobrefy-cache-v1'; // Nome do cache atualizado
+const CACHE_NAME = 'music-player-v3'; // Versão incrementada
 const ASSETS_TO_CACHE = [
     '/',
     '/index.html',
