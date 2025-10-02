@@ -1,0 +1,197 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap');
+
+:root {
+    --primary-color: #1DB954; /* Verde Spotify */
+    --dark-color: #121212;
+    --card-color: #181818;
+    --medium-grey: #282828;
+    --light-grey: #B3B3B3;
+    --white: #FFFFFF;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Montserrat', sans-serif;
+    background-color: var(--dark-color);
+    color: var(--white);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+    -webkit-tap-highlight-color: transparent; /* Remove o highlight azul no toque em mobile */
+}
+
+.main-container {
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+    width: 100%;
+    max-width: 850px;
+}
+
+@media (min-width: 768px) {
+    .main-container {
+        flex-direction: row;
+        align-items: flex-start;
+    }
+}
+
+.player-container, .playlist-container {
+    background-color: var(--card-color);
+    border-radius: 15px;
+    padding: 25px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    transition: all 0.3s ease;
+}
+
+.player-container {
+    width: 100%;
+    max-width: 400px;
+    margin: 0 auto; /* Centraliza em telas menores */
+}
+
+.album-art img {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border-radius: 10px;
+    object-fit: cover;
+    margin-bottom: 25px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+    transition: opacity 0.3s ease; /* Adicione esta linha */
+}
+
+.track-info {
+    text-align: center;
+    margin-bottom: 20px;
+    min-height: 80px; /* Evita que o layout "pule" ao carregar títulos */
+}
+
+.track-title {
+    font-size: 1.5em;
+    font-weight: 700;
+    margin-bottom: 8px;
+    line-height: 1.2;
+}
+
+.track-artist {
+    font-size: 0.9em;
+    font-weight: 400;
+    color: var(--light-grey);
+}
+
+.progress-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+    font-size: 0.8em;
+    color: var(--light-grey);
+}
+
+.progress-bar {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    background: #4d4d4d;
+    outline: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+.progress-bar::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: var(--white);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background 0.3s;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+}
+
+.progress-bar:hover::-webkit-slider-thumb {
+    background: var(--primary-color);
+}
+
+.controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 30px;
+}
+
+.control-btn {
+    background: none;
+    border: none;
+    color: var(--light-grey);
+    font-size: 1.6em;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.control-btn:hover {
+    color: var(--white);
+}
+
+.control-btn.play {
+    font-size: 3.2em;
+    color: var(--white);
+    transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.control-btn.play:hover {
+    transform: scale(1.1);
+}
+
+.playlist-container {
+    flex-grow: 1;
+    width: 100%;
+}
+
+.playlist-container h3 {
+    font-size: 1.2em;
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+.playlist {
+    list-style: none;
+    max-height: 450px; /* Aumenta a altura máxima */
+    overflow-y: auto;
+}
+
+.playlist::-webkit-scrollbar { width: 8px; }
+.playlist::-webkit-scrollbar-track { background: var(--card-color); }
+.playlist::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+.playlist::-webkit-scrollbar-thumb:hover { background: #777; }
+
+.playlist li {
+    padding: 12px 15px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    display: flex;
+    flex-direction: column;
+}
+
+.playlist li:not(:last-child) { margin-bottom: 8px; }
+.playlist li:hover { background-color: rgba(255, 255, 255, 0.05); }
+
+.playlist li.active {
+    background-color: var(--primary-color);
+    color: var(--dark-color);
+    font-weight: 700;
+}
+
+.playlist li .song-title { font-size: 1em; pointer-events: none; }
+.playlist li .song-artist { font-size: 0.8em; opacity: 0.7; pointer-events: none; }
+.playlist li.active .song-artist { color: var(--dark-color); opacity: 0.9; }
