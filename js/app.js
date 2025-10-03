@@ -6,22 +6,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const volumeBtn = document.getElementById('volume-btn'), volumeSlider = document.getElementById('volume-slider');
     const searchInput = document.getElementById('search-input'), searchResultsEl = document.getElementById('search-results');
     // --- ELEMENTOS DO EQUALIZADOR ---
+    const eqToggleBtn = document.getElementById('eq-toggle-btn');
+    const equalizerContainer = document.querySelector('.equalizer-container');
     const eqBass = document.getElementById('eq-bass'), eqMids = document.getElementById('eq-mids'), eqTreble = document.getElementById('eq-treble'), eqPresetsSelect = document.getElementById('eq-presets-select'), eqPresetName = document.getElementById('eq-preset-name'), savePresetBtn = document.getElementById('save-preset-btn');
     // --- ELEMENTOS DA NAVEGAÇÃO E MODAIS ---
     const navButtons = document.querySelectorAll('.nav-btn'), views = document.querySelectorAll('.view'), backBtns = document.querySelectorAll('.back-btn');
     const createBtn = document.getElementById('create-btn');
-    // --- MODAL CRIAR PLAYLIST ---
+    // --- MODAIS ---
     const createPlaylistModal = document.getElementById('create-playlist-modal'), newPlaylistNameInput = document.getElementById('new-playlist-name');
     const confirmCreatePlaylistBtn = document.getElementById('confirm-create-playlist'), cancelCreatePlaylistBtn = document.getElementById('cancel-create-playlist');
-    // --- MODAL ADICIONAR À PLAYLIST ---
     const addToPlaylistModal = document.getElementById('add-to-playlist-modal'), modalPlaylistList = document.getElementById('modal-playlist-list'), cancelAddToPlaylistBtn = document.getElementById('cancel-add-to-playlist');
-    // --- ELEMENTOS DA LISTA E DETALHES DA PLAYLIST ---
+    // --- ELEMENTOS DA PLAYLIST ---
     const playlistsListContainer = document.getElementById('playlists-list-container');
     const playlistDetailName = document.getElementById('playlist-detail-name'), playlistDetailCover = document.getElementById('playlist-detail-cover'), playlistDetailSongs = document.getElementById('playlist-detail-songs');
     const changeCoverBtn = document.getElementById('change-cover-btn'), coverFileInput = document.getElementById('cover-file-input');
     const renamePlaylistBtn = document.getElementById('rename-playlist-btn'), deletePlaylistBtn = document.getElementById('delete-playlist-btn');
     const toastNotification = document.getElementById('toast-notification');
-    // Elementos do estado de playlist vazia
     const playlistEmptyState = document.getElementById('playlist-empty-state');
     const addSongsFromEmptyStateBtn = document.getElementById('add-songs-from-empty-state-btn');
 
@@ -79,12 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
         searchResultsEl.innerHTML = '';
         allSongs.forEach(song => {
             const li = document.createElement('li');
-            li.innerHTML = `
-                <div class="song-info">
-                    <span class="song-title">${song.title}</span>
-                    <span class="song-artist">${song.artist}</span>
-                </div> 
-                <button class="song-action-btn add-song-btn" data-song-file="${song.file}"><i class="fas fa-plus"></i></button>`;
+            li.innerHTML = `<div class="song-info"><span class="song-title">${song.title}</span><span class="song-artist">${song.artist}</span></div> <button class="song-action-btn add-song-btn" data-song-file="${song.file}"><i class="fas fa-plus"></i></button>`;
             searchResultsEl.appendChild(li);
         });
         searchResultsEl.querySelectorAll('.add-song-btn').forEach(btn => btn.addEventListener('click', (e) => {
@@ -183,28 +178,20 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!activePlaylist) return [];
         return activePlaylist.songs.map(file => allSongs.find(s => s.file === file)).filter(Boolean);
     }
-
     function loadSong(playlistIndex, shouldPlay = true) {
         const currentPlaylistSongs = getActivePlaylistSongs();
         if (playlistIndex < 0 || playlistIndex >= currentPlaylistSongs.length) { if (currentPlaylistSongs.length > 0) playlistIndex = 0; else return; }
-        
         state.currentSongIndexInPlaylist = playlistIndex;
         const song = currentPlaylistSongs[playlistIndex];
         if (!song) return;
-
         trackTitle.textContent = song.title || "Título Desconhecido";
         trackArtist.textContent = song.artist || "Artista Desconhecido";
-        
-        // <<< LINHA MODIFICADA AQUI >>>
-        // Agora, a capa do player reflete a capa da playlist ativa.
         const activePlaylist = playlistsData[state.activePlaylistId];
         albumCover.src = activePlaylist ? activePlaylist.cover : 'images/default-cover.jpg';
-
         audio.src = `musics/${song.file}`;
         if (shouldPlay) play(); else audio.currentTime = state.currentTime;
         updateMediaSessionMetadata();
     }
-
     function play() { if (getActivePlaylistSongs().length === 0) return; if (!isAudioContextInitialized) initializeAudioContext(); state.isPlaying = true; if (audioContext.state === 'suspended') audioContext.resume(); audio.play().catch(error => console.error("Erro ao tocar:", error)); playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>'; requestWakeLock(); }
     function pause() { state.isPlaying = false; audio.pause(); playPauseBtn.innerHTML = '<i class="fas fa-play"></i>'; releaseWakeLock(); }
     function togglePlayPause() { (state.isPlaying ? pause : play)(); saveState(); }
@@ -227,6 +214,12 @@ document.addEventListener('DOMContentLoaded', () => {
         progressBar.addEventListener('input', (e) => { if (audio.duration) audio.currentTime = (e.target.value / 100) * audio.duration; });
         volumeSlider.addEventListener('input', e => { state.volume = parseFloat(e.target.value); state.isMuted = state.volume === 0; updateVolumeUI(); saveState(); });
         volumeBtn.addEventListener('click', () => { state.isMuted = !state.isMuted; updateVolumeUI(); saveState(); });
+        
+        eqToggleBtn.addEventListener('click', () => {
+            eqToggleBtn.classList.toggle('active');
+            equalizerContainer.classList.toggle('show');
+        });
+
         searchInput.addEventListener('input', e => {
             const searchTerm = e.target.value.toLowerCase();
             const allListItems = searchResultsEl.querySelectorAll('li');
