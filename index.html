@@ -34,9 +34,12 @@
                             <button id="play-pause-btn" class="control-btn play" title="Play/Pause"><i class="fas fa-play"></i></button>
                             <button id="next-btn" class="control-btn" title="Próxima"><i class="fas fa-forward-step"></i></button>
                         </div>
-                        <div class="volume-control">
-                            <button id="volume-btn" class="control-btn" title="Volume"><i class="fas fa-volume-high"></i></button>
-                            <input type="range" id="volume-slider" class="volume-slider" min="0" max="1" step="0.01" value="1">
+                        <div class="secondary-controls">
+                             <button id="eq-toggle-btn" class="control-btn" title="Equalizador"><i class="fas fa-sliders"></i></button>
+                             <div class="volume-control">
+                                <button id="volume-btn" class="control-btn" title="Volume"><i class="fas fa-volume-high"></i></button>
+                                <input type="range" id="volume-slider" class="volume-slider" min="0" max="1" step="0.01" value="1">
+                            </div>
                         </div>
                     </div>
                     <div class="equalizer-container">
@@ -133,7 +136,7 @@
     <nav class="bottom-nav">
         <button class="nav-btn" data-view="search-view"><i class="fas fa-search"></i><span>Buscar</span></button>
         <button class="nav-btn active" data-view="library-view"><i class="fas fa-compact-disc"></i><span>Player</span></button>
-        <button class="nav-btn" data-view="playlist-view"><i class="fas fa-list-music"></i><span>Playlists</span></button>
+        <button class="nav-btn" data-view="playlist-view"><i class="fas fa-stream"></i><span>Playlists</span></button>
         <button class="nav-btn" id="create-btn"><i class="fas fa-plus"></i><span>Criar</span></button>
     </nav>
     
