@@ -43,4 +43,10 @@ const songs = [
         artist: "Artic Monkeys",
         file: "505-ArticMonkeys.mp3" // Sem 'cover', usará a capa padrão
     },
+{
+        title: "If u think a pretty",
+        artist: "",
+        file: "" ,
+    },
+    {
 ];
