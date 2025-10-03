@@ -23,29 +23,54 @@ const songs = [
         artist: "Artic Monkeys",
         file: "No. 1 Party Anthem.mp3" // Sem 'cover', usará a capa padrão
     },
-	{
+    {
         title: "Selfie",
         artist: "RealestK",
         file: "RealestK - Senfie.mp3" // Sem 'cover', usará a capa padrão
     },
-	{
+    {
         title: "Coming Down",
         artist: "The Weeknd",
         file: "The Weeknd.mp3" // Sem 'cover', usará a capa padrão
     },
-	{
+    {
         title: "Lied To",
         artist: "Zayn",
         file: "Zayn - Lied To.mp3" // Sem 'cover', usará a capa padrão
     },
-{
+    {
         title: "505",
         artist: "Artic Monkeys",
         file: "505-ArticMonkeys.mp3" // Sem 'cover', usará a capa padrão
     },
-{
+    {
         title: "If u think im pretty",
         artist: "Artemo",
         file: "If u think i_m pretty.mp3" ,
+    },
+    {
+        title: "Sweater Weather",
+        artist: "The Neighbourhood",
+        file: "Sweater Weather(MP3_128K).mp3",
+    },
+    {
+        title: "Headlock",
+        artist: "Imogen Heap",
+        file: "Imogen Heap - Headlock (Official Video)(MP3_128K).mp3",
+    },
+    {
+        title: "Art Deco",
+        artist: "Lana Del Rey",
+        file: "Art Deco(MP3_128K).mp3",
+    },
+    {
+        title: "Die With A Smile",
+        artist: "Lady Gaga & Bruno Mars",
+        file: "Lady Gaga_ Bruno Mars - Die With A Smile (Official Music Video)(MP3_128K).mp3",
+    },
+    {
+        title: "Put It on Me",
+        artist: "Matt Maeson",
+        file: "Matt Maeson - Put It on Me(MP3_128K).mp3",
     },
 ];
