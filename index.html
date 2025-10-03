@@ -36,6 +36,7 @@
                             <button id="shuffle-btn" class="control-btn" title="Aleatório"><i class="fas fa-shuffle"></i></button>
                         </div>
                         <div class="secondary-controls">
+                             <button id="effects-toggle-btn" class="control-btn active" title="Ligar/Desligar Efeitos"><i class="fas fa-magic-wand-sparkles"></i></button>
                              <button id="eq-toggle-btn" class="control-btn" title="Equalizador"><i class="fas fa-sliders"></i></button>
                              <div class="volume-control">
                                 <button id="volume-btn" class="control-btn" title="Volume"><i class="fas fa-volume-high"></i></button>
@@ -52,9 +53,11 @@
                                 <button id="save-preset-btn">Salvar</button>
                             </div>
                         </div>
-                        <div class="eq-band"><label>Graves</label><input type="range" id="eq-bass" class="eq-slider" min="-15" max="15" value="0" step="1"></div>
-                        <div class="eq-band"><label>Médios</label><input type="range" id="eq-mids" class="eq-slider" min="-15" max="15" value="0" step="1"></div>
-                        <div class="eq-band"><label>Agudos</label><input type="range" id="eq-treble" class="eq-slider" min="-15" max="15" value="0" step="1"></div>
+                        <div class="eq-band"><label>60Hz</label><input type="range" class="eq-slider" data-band="0" min="-15" max="15" value="0" step="1"></div>
+                        <div class="eq-band"><label>250Hz</label><input type="range" class="eq-slider" data-band="1" min="-15" max="15" value="0" step="1"></div>
+                        <div class="eq-band"><label>1kHz</label><input type="range" class="eq-slider" data-band="2" min="-15" max="15" value="0" step="1"></div>
+                        <div class="eq-band"><label>4kHz</label><input type="range" class="eq-slider" data-band="3" min="-15" max="15" value="0" step="1"></div>
+                        <div class="eq-band"><label>10kHz</label><input type="range" class="eq-slider" data-band="4" min="-15" max="15" value="0" step="1"></div>
                     </div>
                 </div>
             </div>
@@ -106,7 +109,6 @@
             </div>
         </div>
     </main>
-
     <div id="create-playlist-modal" class="modal-overlay">
         <div class="modal-content">
             <h4>Criar nova playlist</h4>
@@ -126,14 +128,12 @@
             </div>
         </div>
     </div>
-    
     <nav class="bottom-nav">
         <button class="nav-btn" data-view="search-view"><i class="fas fa-search"></i><span>Buscar</span></button>
         <button class="nav-btn active" data-view="library-view"><i class="fas fa-compact-disc"></i><span>Player</span></button>
         <button class="nav-btn" data-view="playlist-view"><i class="fas fa-stream"></i><span>Playlists</span></button>
         <button class="nav-btn" id="create-btn"><i class="fas fa-plus"></i><span>Criar</span></button>
     </nav>
-    
     <div id="toast-notification" class="toast"></div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
     <script src="js/song-list.js"></script>
