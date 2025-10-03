@@ -5,8 +5,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const repeatBtn = document.getElementById('repeat-btn'), prevBtn = document.getElementById('prev-btn'), playPauseBtn = document.getElementById('play-pause-btn'), nextBtn = document.getElementById('next-btn'), shuffleBtn = document.getElementById('shuffle-btn');
     const volumeBtn = document.getElementById('volume-btn'), volumeSlider = document.getElementById('volume-slider');
     const searchInput = document.getElementById('search-input'), searchResultsEl = document.getElementById('search-results');
-    const eqToggleBtn = document.getElementById('eq-toggle-btn'), equalizerContainer = document.querySelector('.equalizer-container');
     const effectsToggleBtn = document.getElementById('effects-toggle-btn');
+    const eqToggleBtn = document.getElementById('eq-toggle-btn'), equalizerContainer = document.querySelector('.equalizer-container');
     const eqSliders = document.querySelectorAll('.eq-slider'), eqPresetsSelect = document.getElementById('eq-presets-select'), eqPresetName = document.getElementById('eq-preset-name'), savePresetBtn = document.getElementById('save-preset-btn');
     const navButtons = document.querySelectorAll('.nav-btn'), views = document.querySelectorAll('.view'), backBtns = document.querySelectorAll('.back-btn');
     const createBtn = document.getElementById('create-btn');
@@ -36,11 +36,11 @@ document.addEventListener('DOMContentLoaded', () => {
         playlistIdToEdit: null,
         isPlaying: false, isShuffle: false, volume: 1, isMuted: false, currentTime: 0,
         repeatMode: 'none',
-        isEffectsEnabled: true, // Efeitos começam ligados
+        isEffectsEnabled: true,
     };
     let wakeLock = null, toastTimeout;
 
-    // --- INICIALIZAÇÃO E ESTADO ---
+    // --- FUNÇÕES DE INICIALIZAÇÃO E ESTADO ---
     function init() {
         loadState();
         if (Object.keys(playlistsData).length === 0) createDefaultPlaylist();
@@ -94,35 +94,26 @@ document.addEventListener('DOMContentLoaded', () => {
     function addSongToPlaylist(playlistId, songFile) { const playlist = playlistsData[playlistId]; if (!playlist.songs.includes(songFile)) { playlist.songs.push(songFile); saveState(); renderPlaylistsList(); if(state.playlistIdToEdit === playlistId) renderPlaylistDetail(playlistId); showToast(`Adicionado a "${playlist.name}"`); } else { showToast("A música já está nessa playlist"); } addToPlaylistModal.classList.remove('show'); }
     function removeSongFromPlaylist(playlistId, songFile) { const playlist = playlistsData[playlistId]; playlist.songs = playlist.songs.filter(sf => sf !== songFile); saveState(); renderPlaylistsList(); renderPlaylistDetail(playlistId); const song = allSongs.find(s => s.file === songFile); showToast(`"${song.title}" removido da playlist`); }
     
-    // Otimização de Imagens
     function changePlaylistCover(playlistId, file) {
         const reader = new FileReader();
         const image = new Image();
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
-        const maxSize = 300; 
+        const maxSize = 300;
 
         reader.onload = (e) => {
             image.onload = () => {
                 let width = image.width;
                 let height = image.height;
-
                 if (width > height) {
-                    if (width > maxSize) {
-                        height *= maxSize / width;
-                        width = maxSize;
-                    }
+                    if (width > maxSize) { height *= maxSize / width; width = maxSize; }
                 } else {
-                    if (height > maxSize) {
-                        width *= maxSize / height;
-                        height = maxSize;
-                    }
+                    if (height > maxSize) { width *= maxSize / height; height = maxSize; }
                 }
                 canvas.width = width;
                 canvas.height = height;
                 ctx.drawImage(image, 0, 0, width, height);
                 const newImageData = canvas.toDataURL('image/jpeg', 0.8);
-
                 playlistsData[playlistId].cover = newImageData;
                 saveState();
                 renderAll();
@@ -156,7 +147,18 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- LÓGICA DE REPRODUÇÃO ---
     function getActivePlaylistSongs() { const playlist = playlistsData[state.activePlaylistId]; return playlist ? playlist.songs.map(file => allSongs.find(s => s.file === file)).filter(Boolean) : []; }
     function loadSong(playlistIndex, shouldPlay = true) { const songs = getActivePlaylistSongs(); if (playlistIndex < 0 || playlistIndex >= songs.length) { if (songs.length > 0) playlistIndex = 0; else return; } state.currentSongIndexInPlaylist = playlistIndex; const song = songs[playlistIndex]; if (!song) return; trackTitle.textContent = song.title || "Título Desconhecido"; trackArtist.textContent = song.artist || "Artista Desconhecido"; const activePlaylist = playlistsData[state.activePlaylistId]; albumCover.src = activePlaylist ? activePlaylist.cover : 'images/default-cover.jpg'; audio.src = `musics/${song.file}`; if (shouldPlay) play(); else audio.currentTime = state.currentTime; updateMediaSessionMetadata(); }
-    function play() { if (getActivePlaylistSongs().length === 0) return; if (!isAudioContextInitialized) initializeAudioContext(); state.isPlaying = true; if (audioContext.state === 'suspended') audioContext.resume(); audio.play().catch(e => console.error("Erro ao tocar:", e)); playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>'; requestWakeLock(); }
+    function play() { 
+        if (getActivePlaylistSongs().length === 0) return; 
+        if (!isAudioContextInitialized) initializeAudioContext(); 
+        state.isPlaying = true; 
+        if (audioContext.state === 'suspended') audioContext.resume(); 
+        audio.play().then(() => {
+            if ('wakeLock' in navigator) {
+                requestWakeLock();
+            }
+        }).catch(e => console.error("Erro ao tocar:", e)); 
+        playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>'; 
+    }
     function pause() { state.isPlaying = false; audio.pause(); playPauseBtn.innerHTML = '<i class="fas fa-play"></i>'; releaseWakeLock(); }
     function togglePlayPause() { (state.isPlaying ? pause : play)(); saveState(); }
     function updateRepeatButtonUI() {
@@ -176,13 +178,6 @@ document.addEventListener('DOMContentLoaded', () => {
         prevBtn.addEventListener('click', () => { if (audio.currentTime > 3) audio.currentTime = 0; else changeTrack('prev'); });
         shuffleBtn.addEventListener('click', () => { state.isShuffle = !state.isShuffle; shuffleBtn.classList.toggle('active', state.isShuffle); saveState(); });
         repeatBtn.addEventListener('click', () => { if(state.repeatMode === 'none') state.repeatMode = 'all'; else if (state.repeatMode === 'all') state.repeatMode = 'one'; else state.repeatMode = 'none'; updateRepeatButtonUI(); saveState(); });
-        
-        effectsToggleBtn.addEventListener('click', () => {
-            state.isEffectsEnabled = !state.isEffectsEnabled;
-            connectAudioEffects();
-            saveState();
-        });
-
         audio.addEventListener('timeupdate', updateProgress);
         audio.addEventListener('ended', () => {
             const isLastSong = state.currentSongIndexInPlaylist === getActivePlaylistSongs().length - 1;
@@ -200,6 +195,13 @@ document.addEventListener('DOMContentLoaded', () => {
         volumeSlider.addEventListener('input', e => { state.volume = parseFloat(e.target.value); state.isMuted = state.volume === 0; updateVolumeUI(); saveState(); });
         volumeBtn.addEventListener('click', () => { state.isMuted = !state.isMuted; updateVolumeUI(); saveState(); });
         eqToggleBtn.addEventListener('click', () => { eqToggleBtn.classList.toggle('active'); equalizerContainer.classList.toggle('show'); });
+        
+        effectsToggleBtn.addEventListener('click', () => {
+            state.isEffectsEnabled = !state.isEffectsEnabled;
+            connectAudioEffects();
+            saveState();
+        });
+
         searchInput.addEventListener('input', e => { const term = e.target.value.toLowerCase(); searchResultsEl.querySelectorAll('li').forEach(li => { const text = li.textContent.toLowerCase(); li.style.display = text.includes(term) ? 'flex' : 'none'; }); });
         addSongsFromEmptyStateBtn.addEventListener('click', () => { switchToView('search-view'); });
         confirmCreatePlaylistBtn.addEventListener('click', createNewPlaylist);
@@ -213,35 +215,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // --- FUNÇÕES AUXILIARES ---
-    function connectAudioEffects() {
-        if (!isAudioContextInitialized) return;
-        source.disconnect();
-        compressorNode.disconnect();
-        eqBands.forEach(band => band.disconnect());
-
-        if (state.isEffectsEnabled) {
-            const lastEqBand = eqBands.reduce((prev, curr) => prev.connect(curr), compressorNode);
-            source.connect(compressorNode);
-            lastEqBand.connect(audioContext.destination);
-            effectsToggleBtn.classList.add('active');
-        } else {
-            source.connect(audioContext.destination);
-            effectsToggleBtn.classList.remove('active');
-        }
-    }
-
     function initializeAudioContext() {
         if (isAudioContextInitialized) return;
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
         source = audioContext.createMediaElementSource(audio);
-        
         compressorNode = audioContext.createDynamicsCompressor();
         compressorNode.threshold.setValueAtTime(-40, audioContext.currentTime);
         compressorNode.knee.setValueAtTime(30, audioContext.currentTime);
         compressorNode.ratio.setValueAtTime(12, audioContext.currentTime);
         compressorNode.attack.setValueAtTime(0.01, audioContext.currentTime);
         compressorNode.release.setValueAtTime(0.25, audioContext.currentTime);
-
         const frequencies = [60, 250, 1000, 4000, 10000];
         eqBands = frequencies.map(freq => {
             const filter = audioContext.createBiquadFilter();
@@ -251,9 +234,48 @@ document.addEventListener('DOMContentLoaded', () => {
             filter.gain.value = 0;
             return filter;
         });
-        
         isAudioContextInitialized = true;
         connectAudioEffects();
+        
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && audioContext.state === 'running' && state.isPlaying) {
+                // Mantém o contexto ativo em segundo plano
+            } else if (!document.hidden && audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+        });
+    }
+    
+    function connectAudioEffects() {
+        if (!isAudioContextInitialized) return;
+        
+        try {
+            source.disconnect();
+        } catch(e) {}
+        
+        try {
+            compressorNode.disconnect();
+        } catch(e) {}
+        
+        eqBands.forEach(band => {
+            try {
+                band.disconnect();
+            } catch(e) {}
+        });
+
+        if (state.isEffectsEnabled) {
+            source.connect(compressorNode);
+            let currentNode = compressorNode;
+            eqBands.forEach(band => {
+                currentNode.connect(band);
+                currentNode = band;
+            });
+            currentNode.connect(audioContext.destination);
+            effectsToggleBtn.classList.add('active');
+        } else {
+            source.connect(audioContext.destination);
+            effectsToggleBtn.classList.remove('active');
+        }
     }
 
     function updateProgress() { const { duration, currentTime } = audio; if (duration) { progressBar.value = (currentTime / duration) * 100; durationEl.textContent = formatTime(duration); } currentTimeEl.textContent = formatTime(currentTime); state.currentTime = currentTime; }
@@ -264,29 +286,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const defaultPresets = { 'Flat': [0, 0, 0, 0, 0], 'Rock': [5, -2, -4, 3, 5], 'Pop': [-2, 4, 5, 2, -1], 'Jazz': [4, 2, -2, 3, 4] };
         function getSavedPresets() { return JSON.parse(localStorage.getItem('eqPresets')) || {}; }
         function loadPresets() { const allPresets = { ...defaultPresets, ...getSavedPresets() }; eqPresetsSelect.innerHTML = ''; for (const name in allPresets) { const option = document.createElement('option'); option.value = name; option.textContent = name; eqPresetsSelect.appendChild(option); } }
-        function applyPreset(name) {
-            const allPresets = { ...defaultPresets, ...getSavedPresets() };
-            const preset = allPresets[name];
-            if (preset && preset.length === eqBands.length) {
-                eqSliders.forEach((slider, i) => {
-                    slider.value = preset[i];
-                    if (eqBands[i]) eqBands[i].gain.value = preset[i];
-                });
-            }
-        }
-        function updateFilters(bandIndex, gain) {
-            if (eqBands[bandIndex]) { eqBands[bandIndex].gain.value = gain; }
-        }
+        function applyPreset(name) { const allPresets = { ...defaultPresets, ...getSavedPresets() }; const preset = allPresets[name]; if (preset && preset.length === eqBands.length) { eqSliders.forEach((slider, i) => { slider.value = preset[i]; if (eqBands[i]) eqBands[i].gain.value = preset[i]; }); } }
+        function updateFilters(bandIndex, gain) { if (eqBands[bandIndex]) { eqBands[bandIndex].gain.value = gain; } }
         eqSliders.forEach(slider => { slider.addEventListener('input', (e) => { const bandIndex = parseInt(e.target.dataset.band); const gain = parseFloat(e.target.value); updateFilters(bandIndex, gain); }); });
         eqPresetsSelect.addEventListener('change', (e) => applyPreset(e.target.value));
-        savePresetBtn.addEventListener('click', () => {
-            const name = eqPresetName.value.trim(); if (!name) { alert('Por favor, digite um nome para o preset.'); return; }
-            const savedPresets = getSavedPresets();
-            const values = Array.from(eqSliders).map(s => parseFloat(s.value));
-            savedPresets[name] = values;
-            localStorage.setItem('eqPresets', JSON.stringify(savedPresets));
-            eqPresetName.value = ''; loadPresets(); eqPresetsSelect.value = name;
-        });
+        savePresetBtn.addEventListener('click', () => { const name = eqPresetName.value.trim(); if (!name) { alert('Por favor, digite um nome para o preset.'); return; } const savedPresets = getSavedPresets(); const values = Array.from(eqSliders).map(s => parseFloat(s.value)); savedPresets[name] = values; localStorage.setItem('eqPresets', JSON.stringify(savedPresets)); eqPresetName.value = ''; loadPresets(); eqPresetsSelect.value = name; });
         loadPresets();
         applyPreset('Flat');
     }
@@ -296,6 +300,5 @@ document.addEventListener('DOMContentLoaded', () => {
     function setupMediaSession() { if ('mediaSession' in navigator) { navigator.mediaSession.setActionHandler('play', play); navigator.mediaSession.setActionHandler('pause', pause); navigator.mediaSession.setActionHandler('previoustrack', () => changeTrack('prev')); navigator.mediaSession.setActionHandler('nexttrack', () => changeTrack('next')); } }
     function updateMediaSessionMetadata() { if ('mediaSession' in navigator) { const song = getActivePlaylistSongs()[state.currentSongIndexInPlaylist]; if (!song) return; navigator.mediaSession.metadata = new MediaMetadata({ title: song.title, artist: song.artist, artwork: [{ src: albumCover.src, sizes: '512x512', type: 'image/jpeg' }] }); } }
 
-    // --- INICIALIZAÇÃO ---
     init();
 });
