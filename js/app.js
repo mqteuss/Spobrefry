@@ -22,7 +22,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- ÁUDIO E CONTEXTO ---
     const audio = new Audio();
-    let audioContext, source, bassFilter, midFilter, trebleFilter, isAudioContextInitialized = false;
+    // Adicionado: compressorNode para melhorar a qualidade do áudio
+    let audioContext, source, bassFilter, midFilter, trebleFilter, compressorNode, isAudioContextInitialized = false;
     
     // --- ESTADO GLOBAL DO PLAYER ---
     let allSongs = [...songs];
@@ -37,7 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     let wakeLock = null, toastTimeout;
 
-    // --- INICIALIZAÇÃO E ESTADO ---
+    // --- FUNÇÕES DE INICIALIZAÇÃO E ESTADO ---
     function init() {
         loadState();
         if (Object.keys(playlistsData).length === 0) createDefaultPlaylist();
@@ -119,8 +120,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function play() { if (getActivePlaylistSongs().length === 0) return; if (!isAudioContextInitialized) initializeAudioContext(); state.isPlaying = true; if (audioContext.state === 'suspended') audioContext.resume(); audio.play().catch(e => console.error("Erro ao tocar:", e)); playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>'; requestWakeLock(); }
     function pause() { state.isPlaying = false; audio.pause(); playPauseBtn.innerHTML = '<i class="fas fa-play"></i>'; releaseWakeLock(); }
     function togglePlayPause() { (state.isPlaying ? pause : play)(); saveState(); }
-    
-    // CORRIGIDO: Lógica do botão de repetir
     function updateRepeatButtonUI() {
         repeatBtn.classList.remove('active', 'repeat-mode-one');
         if (state.repeatMode === 'all') {
@@ -129,7 +128,6 @@ document.addEventListener('DOMContentLoaded', () => {
             repeatBtn.classList.add('active', 'repeat-mode-one');
         }
     }
-    
     function changeTrack(direction) { let songs = getActivePlaylistSongs(); if (songs.length === 0) return; let newIndex; if (state.isShuffle) { do { newIndex = Math.floor(Math.random() * songs.length); } while (songs.length > 1 && newIndex === state.currentSongIndexInPlaylist); } else { newIndex = direction === 'next' ? (state.currentSongIndexInPlaylist + 1) % songs.length : (state.currentSongIndexInPlaylist - 1 + songs.length) % songs.length; } loadSong(newIndex, true); }
 
     // --- EVENT LISTENERS ---
@@ -169,7 +167,44 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // --- FUNÇÕES AUXILIARES ---
-    function initializeAudioContext() { if (isAudioContextInitialized) return; audioContext = new (window.AudioContext || window.webkitAudioContext)(); source = audioContext.createMediaElementSource(audio); bassFilter = audioContext.createBiquadFilter(); bassFilter.type = 'lowshelf'; bassFilter.frequency.value = 250; midFilter = audioContext.createBiquadFilter(); midFilter.type = 'peaking'; midFilter.frequency.value = 1000; midFilter.Q.value = 1; trebleFilter = audioContext.createBiquadFilter(); trebleFilter.type = 'highshelf'; trebleFilter.frequency.value = 4000; source.connect(bassFilter); bassFilter.connect(midFilter); midFilter.connect(trebleFilter); trebleFilter.connect(audioContext.destination); isAudioContextInitialized = true; }
+    function initializeAudioContext() {
+        if (isAudioContextInitialized) return;
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        source = audioContext.createMediaElementSource(audio);
+        
+        // Inicializa o Compressor
+        compressorNode = audioContext.createDynamicsCompressor();
+        // Você pode ajustar estes valores para diferentes resultados sonoros
+        compressorNode.threshold.setValueAtTime(-40, audioContext.currentTime); // Nível a partir do qual a compressão começa
+        compressorNode.knee.setValueAtTime(30, audioContext.currentTime);      // Curva de transição suave
+        compressorNode.ratio.setValueAtTime(12, audioContext.currentTime);     // Taxa de compressão
+        compressorNode.attack.setValueAtTime(0.01, audioContext.currentTime);  // Rapidez para começar a comprimir
+        compressorNode.release.setValueAtTime(0.25, audioContext.currentTime); // Rapidez para parar de comprimir
+
+        // Inicializa os filtros do Equalizador
+        bassFilter = audioContext.createBiquadFilter();
+        bassFilter.type = 'lowshelf';
+        bassFilter.frequency.value = 250;
+        
+        midFilter = audioContext.createBiquadFilter();
+        midFilter.type = 'peaking';
+        midFilter.frequency.value = 1000;
+        midFilter.Q.value = 1;
+        
+        trebleFilter = audioContext.createBiquadFilter();
+        trebleFilter.type = 'highshelf';
+        trebleFilter.frequency.value = 4000;
+        
+        // Conecta todos os nós em sequência: Source -> Compressor -> EQ -> Saída
+        source.connect(compressorNode);
+        compressorNode.connect(bassFilter);
+        bassFilter.connect(midFilter);
+        midFilter.connect(trebleFilter);
+        trebleFilter.connect(audioContext.destination);
+        
+        isAudioContextInitialized = true;
+    }
+
     function updateProgress() { const { duration, currentTime } = audio; if (duration) { progressBar.value = (currentTime / duration) * 100; durationEl.textContent = formatTime(duration); } currentTimeEl.textContent = formatTime(currentTime); state.currentTime = currentTime; }
     function formatTime(seconds) { if (isNaN(seconds)) return "0:00"; const minutes = Math.floor(seconds / 60); const secs = Math.floor(seconds % 60); return `${minutes}:${secs < 10 ? '0' : ''}${secs}`; }
     function updateVolumeUI() { volumeSlider.value = state.volume; audio.volume = state.isMuted ? 0 : state.volume; if (state.isMuted || state.volume === 0) volumeBtn.innerHTML = '<i class="fas fa-volume-xmark"></i>'; else if (state.volume < 0.5) volumeBtn.innerHTML = '<i class="fas fa-volume-low"></i>'; else volumeBtn.innerHTML = '<i class="fas fa-volume-high"></i>'; }
