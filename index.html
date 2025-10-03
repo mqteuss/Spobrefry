@@ -29,10 +29,11 @@
                     </div>
                     <div class="controls-container">
                         <div class="main-controls">
-                            <button id="shuffle-btn" class="control-btn" title="Aleatório"><i class="fas fa-shuffle"></i></button>
+                            <button id="repeat-btn" class="control-btn" title="Repetir"><i class="fas fa-repeat"></i></button>
                             <button id="prev-btn" class="control-btn" title="Anterior"><i class="fas fa-backward-step"></i></button>
                             <button id="play-pause-btn" class="control-btn play" title="Play/Pause"><i class="fas fa-play"></i></button>
                             <button id="next-btn" class="control-btn" title="Próxima"><i class="fas fa-forward-step"></i></button>
+                            <button id="shuffle-btn" class="control-btn" title="Aleatório"><i class="fas fa-shuffle"></i></button>
                         </div>
                         <div class="secondary-controls">
                              <button id="eq-toggle-btn" class="control-btn" title="Equalizador"><i class="fas fa-sliders"></i></button>
@@ -64,11 +65,9 @@
                 <div class="page-header">
                     <h3>Suas Playlists</h3>
                 </div>
-                <ul class="playlist-list" id="playlists-list-container">
-                    </ul>
+                <ul class="playlist-list" id="playlists-list-container"></ul>
             </div>
         </div>
-
         <div id="playlist-detail-view" class="view">
             <div class="page-container">
                  <button class="back-btn" data-target="playlist-view"><i class="fas fa-arrow-left"></i> Voltar</button>
@@ -86,9 +85,7 @@
                          </div>
                      </div>
                  </div>
-                 <ul class="playlist" id="playlist-detail-songs">
-                    </ul>
-                 
+                 <ul class="playlist" id="playlist-detail-songs"></ul>
                  <div id="playlist-empty-state" class="empty-state-container">
                     <h3>Sua playlist está vazia</h3>
                     <p>Vamos encontrar algumas músicas para adicionar.</p>
@@ -98,7 +95,6 @@
                 </div>
             </div>
         </div>
-
         <div id="search-view" class="view">
             <div class="page-container">
                 <h2>Buscar</h2>
@@ -106,8 +102,7 @@
                     <i class="fas fa-search search-icon"></i>
                     <input type="text" id="search-input" placeholder="O que você quer ouvir?">
                 </div>
-                <ul class="search-results-list" id="search-results">
-                    </ul>
+                <ul class="search-results-list" id="search-results"></ul>
             </div>
         </div>
     </main>
@@ -122,7 +117,6 @@
             </div>
         </div>
     </div>
-
     <div id="add-to-playlist-modal" class="modal-overlay">
         <div class="modal-content">
             <h4>Adicionar à playlist</h4>
@@ -141,19 +135,8 @@
     </nav>
     
     <div id="toast-notification" class="toast"></div>
-
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
     <script src="js/song-list.js"></script>
     <script src="js/app.js"></script>
-
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/service-worker.js')
-                    .then(reg => console.log('Service Worker: Registrado'))
-                    .catch(err => console.log(`Service Worker: Erro: ${err}`));
-            });
-        }
-    </script>
 </body>
 </html>
