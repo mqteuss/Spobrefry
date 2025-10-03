@@ -73,4 +73,19 @@ const songs = [
         artist: "Matt Maeson",
         file: "Matt Maeson - Put It on Me(MP3_128K).mp3",
     },
+    {
+        title: "Heartbreak Anniversary",
+        artist: "GIVĒON",
+        file: "GIVĒON - Heartbreak Anniversary (Audio)(MP3_128K).mp3",
+    },
+    {
+        title: "Make You Mine",
+        artist: "GIVĒON",
+        file: "GIVĒON - Make You Mine (Official Lyric Video)(MP3_128K).mp3",
+    },
+    {
+        title: "Your Rarest of Flowers",
+        artist: "Ghostly Kisses",
+        file: "Your Rarest of Flowers(MP3_128K).mp3",
+    },
 ];
