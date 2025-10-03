@@ -6,7 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const volumeBtn = document.getElementById('volume-btn'), volumeSlider = document.getElementById('volume-slider');
     const searchInput = document.getElementById('search-input'), searchResultsEl = document.getElementById('search-results');
     const eqToggleBtn = document.getElementById('eq-toggle-btn'), equalizerContainer = document.querySelector('.equalizer-container');
-    const eqBass = document.getElementById('eq-bass'), eqMids = document.getElementById('eq-mids'), eqTreble = document.getElementById('eq-treble'), eqPresetsSelect = document.getElementById('eq-presets-select'), eqPresetName = document.getElementById('eq-preset-name'), savePresetBtn = document.getElementById('save-preset-btn');
+    const eqSliders = document.querySelectorAll('.eq-slider'), eqPresetsSelect = document.getElementById('eq-presets-select'), eqPresetName = document.getElementById('eq-preset-name'), savePresetBtn = document.getElementById('save-preset-btn');
     const navButtons = document.querySelectorAll('.nav-btn'), views = document.querySelectorAll('.view'), backBtns = document.querySelectorAll('.back-btn');
     const createBtn = document.getElementById('create-btn');
     const createPlaylistModal = document.getElementById('create-playlist-modal'), newPlaylistNameInput = document.getElementById('new-playlist-name');
@@ -20,11 +20,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const playlistEmptyState = document.getElementById('playlist-empty-state');
     const addSongsFromEmptyStateBtn = document.getElementById('add-songs-from-empty-state-btn');
 
-    // --- ÁUDIO E CONTEXTO ---
-    const audio = new Audio();
-    // Adicionado: compressorNode para melhorar a qualidade do áudio
-    let audioContext, source, bassFilter, midFilter, trebleFilter, compressorNode, isAudioContextInitialized = false;
-    
+    // --- ÁUDIO E CONTEXTO (MODIFICADO) ---
+    let activeAudio = new Audio();
+    let preloadAudio = new Audio();
+    let audioContext, source1, source2, compressorNode, isAudioContextInitialized = false;
+    let eqBands = [];
+
     // --- ESTADO GLOBAL DO PLAYER ---
     let allSongs = [...songs];
     let playlistsData = {};
@@ -38,7 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     let wakeLock = null, toastTimeout;
 
-    // --- FUNÇÕES DE INICIALIZAÇÃO E ESTADO ---
+    // --- INICIALIZAÇÃO E ESTADO ---
     function init() {
         loadState();
         if (Object.keys(playlistsData).length === 0) createDefaultPlaylist();
@@ -114,12 +115,77 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- LÓGICA DE REPRODUÇÃO ---
+    // --- LÓGICA DE REPRODUÇÃO (MODIFICADO) ---
     function getActivePlaylistSongs() { const playlist = playlistsData[state.activePlaylistId]; return playlist ? playlist.songs.map(file => allSongs.find(s => s.file === file)).filter(Boolean) : []; }
-    function loadSong(playlistIndex, shouldPlay = true) { const songs = getActivePlaylistSongs(); if (playlistIndex < 0 || playlistIndex >= songs.length) { if (songs.length > 0) playlistIndex = 0; else return; } state.currentSongIndexInPlaylist = playlistIndex; const song = songs[playlistIndex]; if (!song) return; trackTitle.textContent = song.title || "Título Desconhecido"; trackArtist.textContent = song.artist || "Artista Desconhecido"; const activePlaylist = playlistsData[state.activePlaylistId]; albumCover.src = activePlaylist ? activePlaylist.cover : 'images/default-cover.jpg'; audio.src = `musics/${song.file}`; if (shouldPlay) play(); else audio.currentTime = state.currentTime; updateMediaSessionMetadata(); }
-    function play() { if (getActivePlaylistSongs().length === 0) return; if (!isAudioContextInitialized) initializeAudioContext(); state.isPlaying = true; if (audioContext.state === 'suspended') audioContext.resume(); audio.play().catch(e => console.error("Erro ao tocar:", e)); playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>'; requestWakeLock(); }
-    function pause() { state.isPlaying = false; audio.pause(); playPauseBtn.innerHTML = '<i class="fas fa-play"></i>'; releaseWakeLock(); }
+    
+    function loadSong(playlistIndex, shouldPlay = true) {
+        const songs = getActivePlaylistSongs();
+        if (playlistIndex < 0 || playlistIndex >= songs.length) {
+            if (songs.length > 0) playlistIndex = 0; else return;
+        }
+        state.currentSongIndexInPlaylist = playlistIndex;
+        const song = songs[playlistIndex];
+        if (!song) return;
+
+        trackTitle.textContent = song.title || "Título Desconhecido";
+        trackArtist.textContent = song.artist || "Artista Desconhecido";
+        const activePlaylist = playlistsData[state.activePlaylistId];
+        albumCover.src = activePlaylist ? activePlaylist.cover : 'images/default-cover.jpg';
+        
+        activeAudio.src = `musics/${song.file}`;
+        activeAudio.load(); // Garante que o carregamento comece
+
+        if (shouldPlay) play();
+        else activeAudio.currentTime = state.currentTime;
+        
+        updateMediaSessionMetadata();
+        preloadNextTrack(); // Pré-carrega a próxima música
+    }
+
+    function preloadNextTrack() {
+        const nextIndex = getNextSongIndex();
+        const songs = getActivePlaylistSongs();
+        if (nextIndex < songs.length) {
+            const nextSong = songs[nextIndex];
+            preloadAudio.src = `musics/${nextSong.file}`;
+            preloadAudio.load();
+        }
+    }
+
+    function getNextSongIndex() {
+        const songs = getActivePlaylistSongs();
+        if (songs.length === 0) return -1;
+        if (state.isShuffle) {
+            let randomIndex;
+            if (songs.length <= 1) return 0;
+            do {
+                randomIndex = Math.floor(Math.random() * songs.length);
+            } while (randomIndex === state.currentSongIndexInPlaylist);
+            return randomIndex;
+        } else {
+            return (state.currentSongIndexInPlaylist + 1) % songs.length;
+        }
+    }
+
+    function play() {
+        if (getActivePlaylistSongs().length === 0) return;
+        if (!isAudioContextInitialized) initializeAudioContext();
+        state.isPlaying = true;
+        if (audioContext.state === 'suspended') audioContext.resume();
+        activeAudio.play().catch(e => console.error("Erro ao tocar:", e));
+        playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>';
+        requestWakeLock();
+    }
+
+    function pause() {
+        state.isPlaying = false;
+        activeAudio.pause();
+        playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
+        releaseWakeLock();
+    }
+
     function togglePlayPause() { (state.isPlaying ? pause : play)(); saveState(); }
+    
     function updateRepeatButtonUI() {
         repeatBtn.classList.remove('active', 'repeat-mode-one');
         if (state.repeatMode === 'all') {
@@ -128,29 +194,51 @@ document.addEventListener('DOMContentLoaded', () => {
             repeatBtn.classList.add('active', 'repeat-mode-one');
         }
     }
-    function changeTrack(direction) { let songs = getActivePlaylistSongs(); if (songs.length === 0) return; let newIndex; if (state.isShuffle) { do { newIndex = Math.floor(Math.random() * songs.length); } while (songs.length > 1 && newIndex === state.currentSongIndexInPlaylist); } else { newIndex = direction === 'next' ? (state.currentSongIndexInPlaylist + 1) % songs.length : (state.currentSongIndexInPlaylist - 1 + songs.length) % songs.length; } loadSong(newIndex, true); }
+
+    function changeTrack(direction) {
+        let newIndex;
+        if (direction === 'next') {
+            [activeAudio, preloadAudio] = [preloadAudio, activeAudio]; // Troca os players
+            newIndex = getNextSongIndex();
+        } else { // 'prev'
+            const songs = getActivePlaylistSongs();
+            if (songs.length === 0) return;
+            newIndex = (state.currentSongIndexInPlaylist - 1 + songs.length) % songs.length;
+        }
+
+        loadSong(newIndex, true); // Carrega e toca a nova música (e pré-carrega a próxima)
+    }
 
     // --- EVENT LISTENERS ---
     function setupEventListeners() {
         playPauseBtn.addEventListener('click', togglePlayPause);
         nextBtn.addEventListener('click', () => changeTrack('next'));
-        prevBtn.addEventListener('click', () => { if (audio.currentTime > 3) audio.currentTime = 0; else changeTrack('prev'); });
-        shuffleBtn.addEventListener('click', () => { state.isShuffle = !state.isShuffle; shuffleBtn.classList.toggle('active', state.isShuffle); saveState(); });
+        prevBtn.addEventListener('click', () => { if (activeAudio.currentTime > 3) activeAudio.currentTime = 0; else changeTrack('prev'); });
+        shuffleBtn.addEventListener('click', () => { state.isShuffle = !state.isShuffle; shuffleBtn.classList.toggle('active', state.isShuffle); preloadNextTrack(); saveState(); });
         repeatBtn.addEventListener('click', () => { if(state.repeatMode === 'none') state.repeatMode = 'all'; else if (state.repeatMode === 'all') state.repeatMode = 'one'; else state.repeatMode = 'none'; updateRepeatButtonUI(); saveState(); });
-        audio.addEventListener('timeupdate', updateProgress);
-        audio.addEventListener('ended', () => {
-            const isLastSong = state.currentSongIndexInPlaylist === getActivePlaylistSongs().length - 1;
-            if (state.repeatMode === 'one') {
-                audio.currentTime = 0;
-                play();
-            } else if (state.repeatMode === 'none' && !state.isShuffle && isLastSong) {
-                pause();
-            } else {
-                changeTrack('next');
-            }
+        
+        [activeAudio, preloadAudio].forEach(audioEl => {
+            audioEl.addEventListener('timeupdate', (e) => {
+                if (e.target === activeAudio) updateProgress();
+            });
+            audioEl.addEventListener('ended', (e) => {
+                if (e.target !== activeAudio) return;
+                const isLastSong = state.currentSongIndexInPlaylist === getActivePlaylistSongs().length - 1;
+                if (state.repeatMode === 'one') {
+                    activeAudio.currentTime = 0;
+                    play();
+                } else if (state.repeatMode === 'none' && !state.isShuffle && isLastSong) {
+                    pause();
+                } else {
+                    changeTrack('next');
+                }
+            });
+            audioEl.addEventListener('loadedmetadata', (e) => {
+                if (e.target === activeAudio) updateProgress();
+            });
         });
-        audio.addEventListener('loadedmetadata', updateProgress);
-        progressBar.addEventListener('input', (e) => { if (audio.duration) audio.currentTime = (e.target.value / 100) * audio.duration; });
+
+        progressBar.addEventListener('input', (e) => { if (activeAudio.duration) activeAudio.currentTime = (e.target.value / 100) * activeAudio.duration; });
         volumeSlider.addEventListener('input', e => { state.volume = parseFloat(e.target.value); state.isMuted = state.volume === 0; updateVolumeUI(); saveState(); });
         volumeBtn.addEventListener('click', () => { state.isMuted = !state.isMuted; updateVolumeUI(); saveState(); });
         eqToggleBtn.addEventListener('click', () => { eqToggleBtn.classList.toggle('active'); equalizerContainer.classList.toggle('show'); });
@@ -170,45 +258,52 @@ document.addEventListener('DOMContentLoaded', () => {
     function initializeAudioContext() {
         if (isAudioContextInitialized) return;
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        source = audioContext.createMediaElementSource(audio);
         
-        // Inicializa o Compressor
+        // Cria duas fontes, uma para cada elemento de áudio
+        source1 = audioContext.createMediaElementSource(activeAudio);
+        source2 = audioContext.createMediaElementSource(preloadAudio);
+        
         compressorNode = audioContext.createDynamicsCompressor();
-        // Você pode ajustar estes valores para diferentes resultados sonoros
-        compressorNode.threshold.setValueAtTime(-40, audioContext.currentTime); // Nível a partir do qual a compressão começa
-        compressorNode.knee.setValueAtTime(30, audioContext.currentTime);      // Curva de transição suave
-        compressorNode.ratio.setValueAtTime(12, audioContext.currentTime);     // Taxa de compressão
-        compressorNode.attack.setValueAtTime(0.01, audioContext.currentTime);  // Rapidez para começar a comprimir
-        compressorNode.release.setValueAtTime(0.25, audioContext.currentTime); // Rapidez para parar de comprimir
+        compressorNode.threshold.setValueAtTime(-40, audioContext.currentTime);
+        compressorNode.knee.setValueAtTime(30, audioContext.currentTime);
+        compressorNode.ratio.setValueAtTime(12, audioContext.currentTime);
+        compressorNode.attack.setValueAtTime(0.01, audioContext.currentTime);
+        compressorNode.release.setValueAtTime(0.25, audioContext.currentTime);
 
-        // Inicializa os filtros do Equalizador
-        bassFilter = audioContext.createBiquadFilter();
-        bassFilter.type = 'lowshelf';
-        bassFilter.frequency.value = 250;
-        
-        midFilter = audioContext.createBiquadFilter();
-        midFilter.type = 'peaking';
-        midFilter.frequency.value = 1000;
-        midFilter.Q.value = 1;
-        
-        trebleFilter = audioContext.createBiquadFilter();
-        trebleFilter.type = 'highshelf';
-        trebleFilter.frequency.value = 4000;
-        
-        // Conecta todos os nós em sequência: Source -> Compressor -> EQ -> Saída
-        source.connect(compressorNode);
-        compressorNode.connect(bassFilter);
-        bassFilter.connect(midFilter);
-        midFilter.connect(trebleFilter);
-        trebleFilter.connect(audioContext.destination);
+        const frequencies = [60, 250, 1000, 4000, 10000];
+        eqBands = frequencies.map(freq => {
+            const filter = audioContext.createBiquadFilter();
+            filter.type = 'peaking';
+            filter.frequency.value = freq;
+            filter.Q.value = 1.5;
+            filter.gain.value = 0;
+            return filter;
+        });
+
+        // Conecta ambas as fontes ao mesmo caminho de áudio
+        const lastEqBand = eqBands.reduce((prev, curr) => prev.connect(curr), compressorNode);
+        source1.connect(compressorNode);
+        source2.connect(compressorNode);
+        lastEqBand.connect(audioContext.destination);
         
         isAudioContextInitialized = true;
     }
 
-    function updateProgress() { const { duration, currentTime } = audio; if (duration) { progressBar.value = (currentTime / duration) * 100; durationEl.textContent = formatTime(duration); } currentTimeEl.textContent = formatTime(currentTime); state.currentTime = currentTime; }
+    function updateProgress() { const { duration, currentTime } = activeAudio; if (duration) { progressBar.value = (currentTime / duration) * 100; durationEl.textContent = formatTime(duration); } currentTimeEl.textContent = formatTime(currentTime); state.currentTime = currentTime; }
     function formatTime(seconds) { if (isNaN(seconds)) return "0:00"; const minutes = Math.floor(seconds / 60); const secs = Math.floor(seconds % 60); return `${minutes}:${secs < 10 ? '0' : ''}${secs}`; }
-    function updateVolumeUI() { volumeSlider.value = state.volume; audio.volume = state.isMuted ? 0 : state.volume; if (state.isMuted || state.volume === 0) volumeBtn.innerHTML = '<i class="fas fa-volume-xmark"></i>'; else if (state.volume < 0.5) volumeBtn.innerHTML = '<i class="fas fa-volume-low"></i>'; else volumeBtn.innerHTML = '<i class="fas fa-volume-high"></i>'; }
-    function setupEqualizer() { const defaultPresets = { 'Flat': { bass: 0, mids: 0, treble: 0 }, 'Rock': { bass: 5, mids: -3, treble: 4 }, 'Pop': { bass: 2, mids: 4, treble: 2 }, 'Jazz': { bass: 3, mids: 2, treble: 5 }, 'Clássico': { bass: -2, mids: 3, treble: 4 } }; function getSavedPresets() { return JSON.parse(localStorage.getItem('eqPresets')) || {}; } function loadPresets() { const allPresets = { ...defaultPresets, ...getSavedPresets() }; eqPresetsSelect.innerHTML = ''; for (const name in allPresets) { const option = document.createElement('option'); option.value = name; option.textContent = name; eqPresetsSelect.appendChild(option); } } function applyPreset(name) { const allPresets = { ...defaultPresets, ...getSavedPresets() }; const preset = allPresets[name]; if (preset) { eqBass.value = preset.bass; eqMids.value = preset.mids; eqTreble.value = preset.treble; updateFilters(); } } function updateFilters() { if (!isAudioContextInitialized) return; bassFilter.gain.value = parseFloat(eqBass.value); midFilter.gain.value = parseFloat(eqMids.value); trebleFilter.gain.value = parseFloat(eqTreble.value); } eqBass.addEventListener('input', updateFilters); eqMids.addEventListener('input', updateFilters); eqTreble.addEventListener('input', updateFilters); eqPresetsSelect.addEventListener('change', (e) => applyPreset(e.target.value)); savePresetBtn.addEventListener('click', () => { const name = eqPresetName.value.trim(); if (!name) { alert('Por favor, digite um nome para o preset.'); return; } const savedPresets = getSavedPresets(); savedPresets[name] = { bass: parseFloat(eqBass.value), mids: parseFloat(eqMids.value), treble: parseFloat(eqTreble.value) }; localStorage.setItem('eqPresets', JSON.stringify(savedPresets)); eqPresetName.value = ''; loadPresets(); eqPresetsSelect.value = name; }); loadPresets(); applyPreset('Flat'); }
+    
+    function updateVolumeUI() {
+        const newVolume = state.isMuted ? 0 : state.volume;
+        volumeSlider.value = state.volume;
+        activeAudio.volume = newVolume;
+        preloadAudio.volume = newVolume; // Garante que o volume seja consistente entre os players
+        
+        if (state.isMuted || state.volume === 0) volumeBtn.innerHTML = '<i class="fas fa-volume-xmark"></i>';
+        else if (state.volume < 0.5) volumeBtn.innerHTML = '<i class="fas fa-volume-low"></i>';
+        else volumeBtn.innerHTML = '<i class="fas fa-volume-high"></i>';
+    }
+
+    function setupEqualizer() { const defaultPresets = { 'Flat': [0, 0, 0, 0, 0], 'Rock': [5, -2, -4, 3, 5], 'Pop': [-2, 4, 5, 2, -1], 'Jazz': [4, 2, -2, 3, 4] }; function getSavedPresets() { return JSON.parse(localStorage.getItem('eqPresets')) || {}; } function loadPresets() { const allPresets = { ...defaultPresets, ...getSavedPresets() }; eqPresetsSelect.innerHTML = ''; for (const name in allPresets) { const option = document.createElement('option'); option.value = name; option.textContent = name; eqPresetsSelect.appendChild(option); } } function applyPreset(name) { const allPresets = { ...defaultPresets, ...getSavedPresets() }; const preset = allPresets[name]; if (preset && preset.length === eqBands.length) { eqSliders.forEach((slider, i) => { slider.value = preset[i]; if (eqBands[i]) eqBands[i].gain.value = preset[i]; }); } } function updateFilters(bandIndex, gain) { if (eqBands[bandIndex]) { eqBands[bandIndex].gain.value = gain; } } eqSliders.forEach(slider => { slider.addEventListener('input', (e) => { const bandIndex = parseInt(e.target.dataset.band); const gain = parseFloat(e.target.value); updateFilters(bandIndex, gain); }); }); eqPresetsSelect.addEventListener('change', (e) => applyPreset(e.target.value)); savePresetBtn.addEventListener('click', () => { const name = eqPresetName.value.trim(); if (!name) { alert('Por favor, digite um nome para o preset.'); return; } const savedPresets = getSavedPresets(); const values = Array.from(eqSliders).map(s => parseFloat(s.value)); savedPresets[name] = values; localStorage.setItem('eqPresets', JSON.stringify(savedPresets)); eqPresetName.value = ''; loadPresets(); eqPresetsSelect.value = name; }); loadPresets(); applyPreset('Flat'); }
     const requestWakeLock = async () => { if ('wakeLock' in navigator) try { wakeLock = await navigator.wakeLock.request('screen'); } catch (err) { console.error(`${err.name}, ${err.message}`); } };
     const releaseWakeLock = async () => { if (wakeLock !== null) { await wakeLock.release(); wakeLock = null; } };
     function setupMediaSession() { if ('mediaSession' in navigator) { navigator.mediaSession.setActionHandler('play', play); navigator.mediaSession.setActionHandler('pause', pause); navigator.mediaSession.setActionHandler('previoustrack', () => changeTrack('prev')); navigator.mediaSession.setActionHandler('nexttrack', () => changeTrack('next')); } }
