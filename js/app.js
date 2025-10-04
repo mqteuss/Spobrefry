@@ -239,13 +239,48 @@ document.addEventListener('DOMContentLoaded', () => {
         isAudioContextInitialized = true;
         connectAudioEffects();
 
-        document.addEventListener('visibilitychange', () => {
-            if (document.hidden && audioContext.state === 'running' && state.isPlaying) {
-                // Mantém o contexto ativo em segundo plano
-            } else if (!document.hidden && audioContext.state === 'suspended') {
-                audioContext.resume();
+        // <<< INÍCIO DA ALTERAÇÃO >>>
+        document.addEventListener('visibilitychange', async () => {
+            // Quando a aba volta a ficar visível
+            if (!document.hidden) {
+                // Se o contexto de áudio foi suspenso pelo navegador, tentamos retomá-lo.
+                // Isso garante que se o som parou, ele possa ser reiniciado pelo usuário.
+                if (audioContext && audioContext.state === 'suspended') {
+                    try {
+                        await audioContext.resume();
+                    } catch (e) {
+                        console.error("Não foi possível resumir o AudioContext ao voltar para a aba.", e);
+                    }
+                }
+                // Se o estado do app diz que deveria estar tocando, mas o áudio está pausado,
+                // tentamos dar play novamente.
+                if (state.isPlaying && audio.paused) {
+                    try {
+                        await audio.play();
+                    } catch (e) {
+                         console.warn("Tentativa de retomar a reprodução ao voltar para a aba falhou.", e);
+                    }
+                }
+            }
+            
+            // O código abaixo é uma tentativa de manter o áudio ativo
+            // mesmo quando o usuário troca de aba. É uma abordagem proativa.
+            if (document.hidden && state.isPlaying) {
+                // Nota: O sucesso desta operação depende muito do navegador e do sistema operacional.
+                // iOS, por exemplo, é bastante restritivo. A Media Session API continua
+                // sendo a forma mais garantida de permitir o controle em segundo plano.
+                try {
+                    if (audioContext.state === 'suspended') {
+                        await audioContext.resume();
+                    }
+                    // A chamada play() aqui pode ser bloqueada, mas o try/catch lida com isso.
+                    await audio.play();
+                } catch (e) {
+                    console.warn("Tentativa de manter o áudio em segundo plano encontrou um bloqueio (comportamento esperado em alguns sistemas).", e);
+                }
             }
         });
+        // <<< FIM DA ALTERAÇÃO >>>
     }
 
     function connectAudioEffects() {
@@ -272,15 +307,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateProgress() { const { duration, currentTime } = audio; if (duration) { progressBar.value = (currentTime / duration) * 100; durationEl.textContent = formatTime(duration); } currentTimeEl.textContent = formatTime(currentTime); state.currentTime = currentTime; }
     function formatTime(seconds) { if (isNaN(seconds)) return "0:00"; const minutes = Math.floor(seconds / 60); const secs = Math.floor(seconds % 60); return `${minutes}:${secs < 10 ? '0' : ''}${secs}`; }
-    
+
     function updateVolumeUI() {
         volumeSlider.value = state.volume;
-        
+
         // Aplica uma curva exponencial (ao quadrado) para um controle mais suave
         const actualVolume = Math.pow(state.volume, 2);
-        
+
         audio.volume = state.isMuted ? 0 : actualVolume;
-        
+
         if (state.isMuted || state.volume === 0) {
             volumeBtn.innerHTML = '<i class="fas fa-volume-xmark"></i>';
         } else if (state.volume < 0.5) {
