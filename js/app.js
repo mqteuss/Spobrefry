@@ -20,6 +20,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const toastNotification = document.getElementById('toast-notification');
     const playlistEmptyState = document.getElementById('playlist-empty-state');
     const addSongsFromEmptyStateBtn = document.getElementById('add-songs-from-empty-state-btn');
+    
+    // NOME DO CACHE PARA AS MÚSICAS BAIXADAS
+    const SONGS_CACHE_NAME = 'downloaded-songs-cache-v1';
 
     // --- ÁUDIO E CONTEXTO ---
     const audio = new Audio();
@@ -96,6 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if(!playlist) { switchToView('playlist-view'); return; }
         playlistDetailName.textContent = playlist.name;
         playlistDetailCover.src = playlist.cover;
+
         if (playlist.songs.length === 0) {
             playlistDetailSongs.innerHTML = ''; playlistDetailSongs.style.display = 'none'; playlistEmptyState.style.display = 'block';
         } else {
@@ -107,7 +111,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 const li = document.createElement('li');
                 li.dataset.songIndex = index;
                 li.draggable = true;
-                li.innerHTML = `<div class="song-info"><span class="song-title">${songData.title}</span><span class="song-artist">${songData.artist}</span></div><button class="song-action-btn danger remove-song-btn" data-song-file="${songFile}"><i class="fas fa-times"></i></button>`;
+                // --- ALTERAÇÃO AQUI: ADICIONADO BOTÃO DE DOWNLOAD ---
+                li.innerHTML = `
+                    <div class="song-info">
+                        <span class="song-title">${songData.title}</span>
+                        <span class="song-artist">${songData.artist}</span>
+                    </div>
+                    <div class="song-actions">
+                        <button class="song-action-btn download-song-btn" data-song-file="${songFile}" title="Baixar para ouvir offline">
+                            <i class="fas fa-download"></i>
+                        </button>
+                        <button class="song-action-btn danger remove-song-btn" data-song-file="${songFile}">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>`;
                 fragment.appendChild(li);
             });
             playlistDetailSongs.appendChild(fragment);
@@ -141,6 +158,7 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.readAsDataURL(file);
     }
 
+    // --- REORDENAÇÃO (DRAG AND DROP) ---
     function setupDragAndDrop(playlistId) {
         const listItems = playlistDetailSongs.querySelectorAll('li[draggable="true"]');
         let draggedIndex = null;
@@ -163,34 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- LÓGICA DE REPRODUÇÃO ---
     function getActivePlaylistSongs() { const playlist = playlistsData[state.activePlaylistId]; return playlist ? playlist.songs.map(file => songMap.get(file)).filter(Boolean) : []; }
-    
-    function loadSong(playlistIndex, shouldPlay = true) {
-        const songs = getActivePlaylistSongs();
-        if (playlistIndex < 0 || playlistIndex >= songs.length) {
-            if (songs.length > 0) playlistIndex = 0; else return;
-        }
-        state.currentSongIndexInPlaylist = playlistIndex;
-        const song = songs[playlistIndex];
-        if (!song) return;
-
-        trackTitle.textContent = song.title || "Título Desconhecido";
-        trackArtist.textContent = song.artist || "Artista Desconhecido";
-        const activePlaylist = playlistsData[state.activePlaylistId];
-        albumCover.src = activePlaylist ? activePlaylist.cover : 'images/default-cover.jpg';
-        audio.src = `musics/${song.file}`;
-
-        if (shouldPlay) {
-            play();
-        } else {
-            audio.currentTime = state.currentTime;
-        }
-
-        updateMediaSessionMetadata();
-        
-        // OTIMIZAÇÃO DE ÁUDIO: Inicia o pré-carregamento da próxima música
-        preloadNextTrack();
-    }
-
+    function loadSong(playlistIndex, shouldPlay = true) { const songs = getActivePlaylistSongs(); if (playlistIndex < 0 || playlistIndex >= songs.length) { if (songs.length > 0) playlistIndex = 0; else return; } state.currentSongIndexInPlaylist = playlistIndex; const song = songs[playlistIndex]; if (!song) return; trackTitle.textContent = song.title || "Título Desconhecido"; trackArtist.textContent = song.artist || "Artista Desconhecido"; const activePlaylist = playlistsData[state.activePlaylistId]; albumCover.src = activePlaylist ? activePlaylist.cover : 'images/default-cover.jpg'; audio.src = `musics/${song.file}`; if (shouldPlay) play(); else audio.currentTime = state.currentTime; updateMediaSessionMetadata(); }
     function play() { if (getActivePlaylistSongs().length === 0) return; if (!isAudioContextInitialized) initializeAudioContext(); state.isPlaying = true; if (audioContext.state === 'suspended') audioContext.resume(); audio.play().then(() => { if ('wakeLock' in navigator) requestWakeLock(); }).catch(e => console.error("Erro ao tocar:", e)); playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>'; }
     function pause() { state.isPlaying = false; audio.pause(); playPauseBtn.innerHTML = '<i class="fas fa-play"></i>'; releaseWakeLock(); }
     function togglePlayPause() { (state.isPlaying ? pause : play)(); saveState(); }
@@ -221,7 +212,7 @@ document.addEventListener('DOMContentLoaded', () => {
         deletePlaylistBtn.addEventListener('click', () => deletePlaylist(state.playlistIdToEdit));
         changeCoverBtn.addEventListener('click', () => coverFileInput.click());
         coverFileInput.addEventListener('change', (e) => { if (e.target.files[0]) changePlaylistCover(state.playlistIdToEdit, e.target.files[0]); });
-
+        
         playlistDetailSongs.addEventListener('click', (e) => {
             const songInfo = e.target.closest('.song-info');
             if (songInfo) {
@@ -236,6 +227,29 @@ document.addEventListener('DOMContentLoaded', () => {
             if (removeBtn) {
                 const songFile = removeBtn.dataset.songFile;
                 removeSongFromPlaylist(state.playlistIdToEdit, songFile);
+                return;
+            }
+
+            // --- ALTERAÇÃO AQUI: LÓGICA DO BOTÃO DE DOWNLOAD ---
+            const downloadBtn = e.target.closest('.download-song-btn');
+            if (downloadBtn) {
+                const songFile = downloadBtn.dataset.songFile;
+                const musicUrl = `musics/${songFile}`;
+
+                downloadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+                caches.open(SONGS_CACHE_NAME).then(cache => {
+                    return cache.add(musicUrl);
+                }).then(() => {
+                    showToast(`"${songMap.get(songFile).title}" baixada!`);
+                    downloadBtn.innerHTML = '<i class="fas fa-check-circle"></i>';
+                    downloadBtn.style.color = 'var(--primary-color)';
+                    downloadBtn.disabled = true; 
+                }).catch(error => {
+                    console.error('Falha ao baixar a música:', error);
+                    showToast("Erro ao baixar a música.");
+                    downloadBtn.innerHTML = '<i class="fas fa-download"></i>';
+                });
                 return;
             }
         });
@@ -258,39 +272,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- FUNÇÕES AUXILIARES ---
-
-    // OTIMIZAÇÃO DE ÁUDIO: Pré-carrega a próxima faixa para uma transição suave
-    function preloadNextTrack() {
-        const existingPreloadLink = document.getElementById('preload-link');
-        if (existingPreloadLink) {
-            existingPreloadLink.remove();
-        }
-
-        const songs = getActivePlaylistSongs();
-        if (songs.length < 2) return;
-
-        let nextIndex;
-        if (state.isShuffle) {
-            return;
-        } else {
-            nextIndex = (state.currentSongIndexInPlaylist + 1) % songs.length;
-        }
-        
-        if (nextIndex === state.currentSongIndexInPlaylist && state.repeatMode === 'one') {
-            return;
-        }
-
-        const nextSong = songs[nextIndex];
-        if (!nextSong) return;
-
-        const preloadLink = document.createElement('link');
-        preloadLink.id = 'preload-link';
-        preloadLink.rel = 'preload';
-        preloadLink.href = `musics/${nextSong.file}`;
-        preloadLink.as = 'audio';
-        document.head.appendChild(preloadLink);
-    }
-
     function initializeAudioContext() {
         if (isAudioContextInitialized) return;
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -301,17 +282,7 @@ document.addEventListener('DOMContentLoaded', () => {
         eqBands = frequencies.map(freq => { const filter = audioContext.createBiquadFilter(); filter.type = 'peaking'; filter.frequency.value = freq; filter.Q.value = 1.5; filter.gain.value = 0; return filter; });
         isAudioContextInitialized = true;
         connectAudioEffects();
-        
-        // OTIMIZAÇÃO DE ÁUDIO: Listener robusto para retomar o contexto de áudio
-        document.addEventListener('visibilitychange', () => {
-            if (!document.hidden && audioContext && audioContext.state === 'suspended') {
-                try {
-                    audioContext.resume();
-                } catch(e) {
-                    console.error("Falha ao tentar resumir o AudioContext:", e);
-                }
-            }
-        });
+        document.addEventListener('visibilitychange', () => { if (!document.hidden && audioContext.state === 'suspended') { audioContext.resume(); } });
     }
 
     function connectAudioEffects() {
