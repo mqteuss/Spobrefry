@@ -211,6 +211,17 @@ document.addEventListener('DOMContentLoaded', () => {
         deletePlaylistBtn.addEventListener('click', () => deletePlaylist(state.playlistIdToEdit));
         changeCoverBtn.addEventListener('click', () => coverFileInput.click());
         coverFileInput.addEventListener('change', (e) => { if (e.target.files[0]) changePlaylistCover(state.playlistIdToEdit, e.target.files[0]); });
+        
+        // VINCULA O VOLUME DO APP COM O VOLUME DO SISTEMA
+        audio.addEventListener('volumechange', () => {
+            if (state.volume !== audio.volume || state.isMuted !== audio.muted) {
+                state.volume = audio.volume;
+                state.isMuted = audio.muted;
+                updateVolumeUI();
+                saveState();
+            }
+        });
+
         setInterval(saveState, 5000);
     }
 
