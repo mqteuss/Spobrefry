@@ -264,30 +264,30 @@ document.addEventListener('DOMContentLoaded', () => {
     function connectAudioEffects() {
         if (!isAudioContextInitialized) return;
 
-        try {
-            source.disconnect();
-        } catch(e) {}
-
-        try {
-            compressorNode.disconnect();
-        } catch(e) {}
-
-        eqBands.forEach(band => {
-            try {
-                band.disconnect();
-            } catch(e) {}
-        });
+        // Desconecta tudo para garantir uma conexão limpa
+        source.disconnect();
+        compressorNode.disconnect();
+        eqBands.forEach(band => band.disconnect());
 
         if (state.isEffectsEnabled) {
-            source.connect(compressorNode);
-            let currentNode = compressorNode;
+            // Nova ordem: source -> EQ -> compressor -> destination
+            let currentNode = source;
+            
+            // Conecta a fonte ao primeiro slider do EQ
             eqBands.forEach(band => {
                 currentNode.connect(band);
-                currentNode = band;
+                currentNode = band; // O nó atual se torna a banda do EQ
             });
-            currentNode.connect(audioContext.destination);
+            
+            // Conecta a última banda do EQ ao compressor
+            currentNode.connect(compressorNode);
+            
+            // Conecta o compressor à saída de áudio final
+            compressorNode.connect(audioContext.destination);
+            
             effectsToggleBtn.classList.add('active');
         } else {
+            // Se os efeitos estiverem desligados, conecta a fonte direto na saída
             source.connect(audioContext.destination);
             effectsToggleBtn.classList.remove('active');
         }
