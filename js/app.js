@@ -50,10 +50,6 @@ document.addEventListener('DOMContentLoaded', () => {
         updateRepeatButtonUI();
         loadSong(state.currentSongIndexInPlaylist, false);
         setupEventListeners();
-        
-        // INICIA A VERIFICAÇÃO PERIÓDICA DE VOLUME
-        setInterval(checkSystemVolume, 500); // Verifica a cada 500ms
-
         setupMediaSession();
         updateVolumeUI();
         setupEqualizer();
@@ -215,17 +211,6 @@ document.addEventListener('DOMContentLoaded', () => {
         deletePlaylistBtn.addEventListener('click', () => deletePlaylist(state.playlistIdToEdit));
         changeCoverBtn.addEventListener('click', () => coverFileInput.click());
         coverFileInput.addEventListener('change', (e) => { if (e.target.files[0]) changePlaylistCover(state.playlistIdToEdit, e.target.files[0]); });
-        
-        // VINCULA O VOLUME DO APP COM O VOLUME DO SISTEMA (MÉTODO 1)
-        audio.addEventListener('volumechange', () => {
-            if (state.volume !== audio.volume || state.isMuted !== audio.muted) {
-                state.volume = audio.volume;
-                state.isMuted = audio.muted;
-                updateVolumeUI();
-                saveState();
-            }
-        });
-
         setInterval(saveState, 5000);
     }
 
@@ -235,11 +220,13 @@ document.addEventListener('DOMContentLoaded', () => {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
         source = audioContext.createMediaElementSource(audio);
         compressorNode = audioContext.createDynamicsCompressor();
+        // Valores ajustados para serem mais suaves e evitar estalos
         compressorNode.threshold.setValueAtTime(-24, audioContext.currentTime);
         compressorNode.knee.setValueAtTime(30, audioContext.currentTime);
         compressorNode.ratio.setValueAtTime(12, audioContext.currentTime);
         compressorNode.attack.setValueAtTime(0.05, audioContext.currentTime);
         compressorNode.release.setValueAtTime(0.3, audioContext.currentTime);
+
         const frequencies = [60, 250, 1000, 4000, 10000];
         eqBands = frequencies.map(freq => {
             const filter = audioContext.createBiquadFilter();
@@ -264,30 +251,20 @@ document.addEventListener('DOMContentLoaded', () => {
     function connectAudioEffects() {
         if (!isAudioContextInitialized) return;
 
-        // Desconecta tudo para garantir uma conexão limpa
-        source.disconnect();
-        compressorNode.disconnect();
-        eqBands.forEach(band => band.disconnect());
+        try { source.disconnect(); } catch(e) {}
+        try { compressorNode.disconnect(); } catch(e) {}
+        eqBands.forEach(band => { try { band.disconnect(); } catch(e) {} });
 
         if (state.isEffectsEnabled) {
-            // Nova ordem: source -> EQ -> compressor -> destination
-            let currentNode = source;
-            
-            // Conecta a fonte ao primeiro slider do EQ
+            source.connect(compressorNode);
+            let currentNode = compressorNode;
             eqBands.forEach(band => {
                 currentNode.connect(band);
-                currentNode = band; // O nó atual se torna a banda do EQ
+                currentNode = band;
             });
-            
-            // Conecta a última banda do EQ ao compressor
-            currentNode.connect(compressorNode);
-            
-            // Conecta o compressor à saída de áudio final
-            compressorNode.connect(audioContext.destination);
-            
+            currentNode.connect(audioContext.destination);
             effectsToggleBtn.classList.add('active');
         } else {
-            // Se os efeitos estiverem desligados, conecta a fonte direto na saída
             source.connect(audioContext.destination);
             effectsToggleBtn.classList.remove('active');
         }
@@ -295,16 +272,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateProgress() { const { duration, currentTime } = audio; if (duration) { progressBar.value = (currentTime / duration) * 100; durationEl.textContent = formatTime(duration); } currentTimeEl.textContent = formatTime(currentTime); state.currentTime = currentTime; }
     function formatTime(seconds) { if (isNaN(seconds)) return "0:00"; const minutes = Math.floor(seconds / 60); const secs = Math.floor(seconds % 60); return `${minutes}:${secs < 10 ? '0' : ''}${secs}`; }
-    function updateVolumeUI() { volumeSlider.value = state.volume; audio.volume = state.isMuted ? 0 : state.volume; if (state.isMuted || state.volume === 0) volumeBtn.innerHTML = '<i class="fas fa-volume-xmark"></i>'; else if (state.volume < 0.5) volumeBtn.innerHTML = '<i class="fas fa-volume-low"></i>'; else volumeBtn.innerHTML = '<i class="fas fa-volume-high"></i>'; }
-
-    // NOVA FUNÇÃO PARA VERIFICAR E SINCRONIZAR O VOLUME (MÉTODO 2 - GARANTIDO)
-    function checkSystemVolume() {
-        if (state.isPlaying) {
-            if (Math.abs(audio.volume - state.volume) > 0.01 || audio.muted !== state.isMuted) {
-                state.volume = audio.volume;
-                state.isMuted = audio.muted;
-                updateVolumeUI();
-            }
+    
+    function updateVolumeUI() {
+        volumeSlider.value = state.volume;
+        
+        // Aplica uma curva exponencial (ao quadrado) para um controle mais suave
+        const actualVolume = Math.pow(state.volume, 2);
+        
+        audio.volume = state.isMuted ? 0 : actualVolume;
+        
+        if (state.isMuted || state.volume === 0) {
+            volumeBtn.innerHTML = '<i class="fas fa-volume-xmark"></i>';
+        } else if (state.volume < 0.5) {
+            volumeBtn.innerHTML = '<i class="fas fa-volume-low"></i>';
+        } else {
+            volumeBtn.innerHTML = '<i class="fas fa-volume-high"></i>';
         }
     }
 
