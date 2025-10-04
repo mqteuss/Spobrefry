@@ -69,6 +69,20 @@ document.addEventListener('DOMContentLoaded', () => {
     function setupNavigation() { navButtons.forEach(btn => { if (btn.id !== 'create-btn') btn.addEventListener('click', () => switchToView(btn.dataset.view)); }); backBtns.forEach(btn => btn.addEventListener('click', () => switchToView(btn.dataset.target))); createBtn.addEventListener('click', () => createPlaylistModal.classList.add('show')); }
     function showToast(message) { clearTimeout(toastTimeout); toastNotification.textContent = message; toastNotification.classList.add('show'); toastTimeout = setTimeout(() => toastNotification.classList.remove('show'), 3000); }
 
+    // --- NOVA FUNÇÃO ---
+    // Verifica se uma música já está no cache. Retorna uma Promise.
+    async function isSongDownloaded(songFile) {
+        const musicUrl = `musics/${songFile}`;
+        try {
+            const cache = await caches.open(SONGS_CACHE_NAME);
+            const response = await cache.match(musicUrl);
+            return !!response; // Retorna true se a resposta existir, false caso contrário
+        } catch (error) {
+            console.error("Erro ao verificar cache:", error);
+            return false;
+        }
+    }
+    
     // --- GERENCIAMENTO DE PLAYLISTS E BUSCA ---
     function renderFullSearchList() {
         searchResultsEl.innerHTML = '';
@@ -94,7 +108,9 @@ document.addEventListener('DOMContentLoaded', () => {
         playlistsListContainer.appendChild(fragment);
     }
 
-    function renderPlaylistDetail(playlistId) {
+    // --- FUNÇÃO MODIFICADA ---
+    // Agora a função é 'async' para poder usar 'await' na verificação do cache
+    async function renderPlaylistDetail(playlistId) {
         const playlist = playlistsData[playlistId];
         if(!playlist) { switchToView('playlist-view'); return; }
         playlistDetailName.textContent = playlist.name;
@@ -105,28 +121,47 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             playlistDetailSongs.style.display = 'block'; playlistEmptyState.style.display = 'none'; playlistDetailSongs.innerHTML = '';
             const fragment = document.createDocumentFragment();
-            playlist.songs.forEach((songFile, index) => {
+
+            // Usamos um loop for...of para poder usar 'await' dentro dele
+            for (const [index, songFile] of playlist.songs.entries()) {
                 const songData = songMap.get(songFile);
-                if(!songData) return;
+                if(!songData) continue; // Pula para a próxima iteração se a música não for encontrada
+                
                 const li = document.createElement('li');
                 li.dataset.songIndex = index;
                 li.draggable = true;
-                // --- ALTERAÇÃO AQUI: ADICIONADO BOTÃO DE DOWNLOAD ---
+                
+                // Verifica se a música já foi baixada
+                const isDownloaded = await isSongDownloaded(songFile);
+
+                let downloadButtonHtml = '';
+                if (isDownloaded) {
+                    // Se já baixou, mostra o botão de "correto", desabilitado
+                    downloadButtonHtml = `
+                        <button class="song-action-btn" title="Já baixado" disabled>
+                            <i class="fas fa-check-circle" style="color: var(--primary-color);"></i>
+                        </button>`;
+                } else {
+                    // Se não, mostra o botão de download
+                    downloadButtonHtml = `
+                        <button class="song-action-btn download-song-btn" data-song-file="${songFile}" title="Baixar para ouvir offline">
+                            <i class="fas fa-download"></i>
+                        </button>`;
+                }
+
                 li.innerHTML = `
                     <div class="song-info">
                         <span class="song-title">${songData.title}</span>
                         <span class="song-artist">${songData.artist}</span>
                     </div>
                     <div class="song-actions">
-                        <button class="song-action-btn download-song-btn" data-song-file="${songFile}" title="Baixar para ouvir offline">
-                            <i class="fas fa-download"></i>
-                        </button>
+                        ${downloadButtonHtml}
                         <button class="song-action-btn danger remove-song-btn" data-song-file="${songFile}">
                             <i class="fas fa-times"></i>
                         </button>
                     </div>`;
                 fragment.appendChild(li);
-            });
+            }
             playlistDetailSongs.appendChild(fragment);
             setupDragAndDrop(playlistId);
         }
@@ -230,7 +265,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // --- ALTERAÇÃO AQUI: LÓGICA DO BOTÃO DE DOWNLOAD ---
             const downloadBtn = e.target.closest('.download-song-btn');
             if (downloadBtn) {
                 const songFile = downloadBtn.dataset.songFile;
