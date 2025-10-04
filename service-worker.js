@@ -14,7 +14,7 @@ const ASSETS_TO_CACHE = [
     '/musics/DJ Snake - U Are My High (Feat. Future).mp3',
     '/musics/LEOWOLF - Romantic Gangster.mp3',
     '/musics/No. 1 Party Anthem.mp3',
-    '/musics/RealestK - Selfie.mp3',
+    '/musics/RealestK - Senfie.mp3',
     '/musics/The Weeknd.mp3',
     '/musics/Zayn - Lied To.mp3',
     '/musics/505-ArticMonkeys.mp3',
