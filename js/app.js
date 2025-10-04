@@ -50,6 +50,10 @@ document.addEventListener('DOMContentLoaded', () => {
         updateRepeatButtonUI();
         loadSong(state.currentSongIndexInPlaylist, false);
         setupEventListeners();
+        
+        // INICIA A VERIFICAÇÃO PERIÓDICA DE VOLUME
+        setInterval(checkSystemVolume, 500); // Verifica a cada 500ms
+
         setupMediaSession();
         updateVolumeUI();
         setupEqualizer();
@@ -212,7 +216,7 @@ document.addEventListener('DOMContentLoaded', () => {
         changeCoverBtn.addEventListener('click', () => coverFileInput.click());
         coverFileInput.addEventListener('change', (e) => { if (e.target.files[0]) changePlaylistCover(state.playlistIdToEdit, e.target.files[0]); });
         
-        // VINCULA O VOLUME DO APP COM O VOLUME DO SISTEMA
+        // VINCULA O VOLUME DO APP COM O VOLUME DO SISTEMA (MÉTODO 1)
         audio.addEventListener('volumechange', () => {
             if (state.volume !== audio.volume || state.isMuted !== audio.muted) {
                 state.volume = audio.volume;
@@ -292,6 +296,17 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateProgress() { const { duration, currentTime } = audio; if (duration) { progressBar.value = (currentTime / duration) * 100; durationEl.textContent = formatTime(duration); } currentTimeEl.textContent = formatTime(currentTime); state.currentTime = currentTime; }
     function formatTime(seconds) { if (isNaN(seconds)) return "0:00"; const minutes = Math.floor(seconds / 60); const secs = Math.floor(seconds % 60); return `${minutes}:${secs < 10 ? '0' : ''}${secs}`; }
     function updateVolumeUI() { volumeSlider.value = state.volume; audio.volume = state.isMuted ? 0 : state.volume; if (state.isMuted || state.volume === 0) volumeBtn.innerHTML = '<i class="fas fa-volume-xmark"></i>'; else if (state.volume < 0.5) volumeBtn.innerHTML = '<i class="fas fa-volume-low"></i>'; else volumeBtn.innerHTML = '<i class="fas fa-volume-high"></i>'; }
+
+    // NOVA FUNÇÃO PARA VERIFICAR E SINCRONIZAR O VOLUME (MÉTODO 2 - GARANTIDO)
+    function checkSystemVolume() {
+        if (state.isPlaying) {
+            if (Math.abs(audio.volume - state.volume) > 0.01 || audio.muted !== state.isMuted) {
+                state.volume = audio.volume;
+                state.isMuted = audio.muted;
+                updateVolumeUI();
+            }
+        }
+    }
 
     function setupEqualizer() {
         const defaultPresets = { 'Flat': [0, 0, 0, 0, 0], 'Rock': [5, -2, -4, 3, 5], 'Pop': [-2, 4, 5, 2, -1], 'Jazz': [4, 2, -2, 3, 4] };
