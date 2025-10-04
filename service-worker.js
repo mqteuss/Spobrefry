@@ -1,5 +1,5 @@
-// Versão incrementada para forçar a atualização do cache
-const CACHE_NAME = 'music-player-v4'; 
+const CACHE_NAME = 'music-player-v4'; // Versão incrementada para forçar a atualização
+const SONGS_CACHE_NAME = 'downloaded-songs-cache-v1'; // Mesmo nome usado no app.js
 const ASSETS_TO_CACHE = [
     '/',
     '/index.html',
@@ -7,33 +7,14 @@ const ASSETS_TO_CACHE = [
     '/js/app.js',
     '/js/song-list.js',
     '/images/default-cover.jpg',
-    'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css',
-    
-    // --- LISTA DE MÚSICAS PARA CACHE OFFLINE ---
-    '/musics/Chris Grey - ALWAYS BEEN YOU.mp3',
-    '/musics/DJ Snake - U Are My High (Feat. Future).mp3',
-    '/musics/LEOWOLF - Romantic Gangster.mp3',
-    '/musics/No. 1 Party Anthem.mp3',
-    '/musics/RealestK - Senfie.mp3',
-    '/musics/The Weeknd.mp3',
-    '/musics/Zayn - Lied To.mp3',
-    '/musics/505-ArticMonkeys.mp3',
-    '/musics/If u think i_m pretty.mp3',
-    '/musics/Sweater Weather(MP3_128K).mp3',
-    '/musics/Imogen Heap - Headlock (Official Video)(MP3_128K).mp3',
-    '/musics/Art Deco(MP3_128K).mp3',
-    '/musics/Lady Gaga_ Bruno Mars - Die With A Smile (Official Music Video)(MP3_128K).mp3',
-    '/musics/Matt Maeson - Put It on Me(MP3_128K).mp3',
-    '/musics/GIVĒON - Heartbreak Anniversary (Audio)(MP3_128K).mp3',
-    '/musics/GIVĒON - Make You Mine (Official Lyric Video)(MP3_128K).mp3',
-    '/musics/Your Rarest of Flowers(MP3_128K).mp3'
+    'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css'
 ];
 
 self.addEventListener('install', event => {
     event.waitUntil(
         caches.open(CACHE_NAME)
             .then(cache => {
-                console.log('Cache aberto e assets principais armazenados');
+                console.log('Cache principal aberto e assets armazenados');
                 return cache.addAll(ASSETS_TO_CACHE);
             })
     );
@@ -45,21 +26,41 @@ self.addEventListener('activate', event => {
         caches.keys().then(cacheNames => {
             return Promise.all(
                 cacheNames.map(cache => {
-                    if (cache !== CACHE_NAME) {
-                        console.log('Cache antigo removido');
+                    // Deleta os caches antigos, exceto o de músicas baixadas
+                    if (cache !== CACHE_NAME && cache !== SONGS_CACHE_NAME) {
+                        console.log('Cache antigo removido:', cache);
                         return caches.delete(cache);
                     }
                 })
             );
         })
     );
+    return self.clients.claim();
 });
 
 self.addEventListener('fetch', event => {
-    event.respondWith(
-        caches.match(event.request)
-            .then(response => {
-                return response || fetch(event.request);
-            })
-    );
+    const url = new URL(event.request.url);
+
+    // Se for uma requisição de música (termina com .mp3), use a estratégia "Cache first"
+    if (url.pathname.endsWith('.mp3')) {
+        event.respondWith(
+            caches.match(event.request)
+                .then(cachedResponse => {
+                    // Se a música estiver no cache, retorna ela
+                    if (cachedResponse) {
+                        return cachedResponse;
+                    }
+                    // Se não, busca na rede
+                    return fetch(event.request);
+                })
+        );
+    } else {
+        // Para todos os outros assets, usa a estratégia "Cache falling back to network"
+        event.respondWith(
+            caches.match(event.request)
+                .then(response => {
+                    return response || fetch(event.request);
+                })
+        );
+    }
 });
